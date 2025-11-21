@@ -12,7 +12,7 @@ class LLMClient:
         self._provider = provider
 
         # 延迟导入对应 SDK，避免不必要依赖
-        if provider == "openai":
+        if provider in ("openai", "openai-response"):
             from openai import OpenAI
 
             self._client = OpenAI(api_key=config.api_key, base_url=config.base_url)
@@ -51,6 +51,8 @@ class LLMClient:
 
         if self._provider == "openai":
             return self._summarize_with_openai(system_prompt, user_content)
+        if self._provider == "openai-response":
+            return self._summarize_with_openai_response(system_prompt, user_content)
         if self._provider == "anthropic":
             return self._summarize_with_anthropic(system_prompt, user_content)
         if self._provider == "gemini":
@@ -69,6 +71,36 @@ class LLMClient:
             temperature=0.2,
         )
         return resp.choices[0].message.content or ""
+
+    def _summarize_with_openai_response(self, system_prompt: str, user_content: str) -> str:
+        # OpenAI Responses API，支持新一代统一输入输出格式
+        # 对于兼容 Responses 的服务，可配置 provider=openai-response
+        input_segments: List[Dict[str, Any]] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
+
+        resp = self._client.responses.create(
+            model=self._config.model,
+            input=input_segments,
+            temperature=0.2,
+        )
+
+        parts: List[str] = []
+        for item in getattr(resp, "output", []) or []:
+            for content in getattr(item, "content", []) or []:
+                text = getattr(content, "text", None)
+                if text:
+                    parts.append(text)
+
+        text = "".join(parts).strip()
+        if not text:
+            # 兜底：有些兼容服务可能直接返回 text 字段
+            direct_text = getattr(resp, "text", None)
+            if isinstance(direct_text, str) and direct_text.strip():
+                return direct_text.strip()
+            text = str(resp)
+        return text
 
     def _summarize_with_anthropic(self, system_prompt: str, user_content: str) -> str:
         # Anthropic 原生 SDK，使用 messages API

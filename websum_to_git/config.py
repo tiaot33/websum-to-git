@@ -66,7 +66,7 @@ def load_config(path: str | Path) -> AppConfig:
     model = _require(llm_raw, "model")
     base_url = llm_raw.get("base_url")
 
-    if provider == "openai":
+    if provider in ("openai", "openai-response"):
         # 对于 OpenAI/兼容服务，如果未指定 base_url，则使用官方默认地址
         base_url = base_url or "https://api.openai.com"
 
