@@ -43,7 +43,9 @@ class GitHubPublisher:
             return self._repo_dir
 
         safe_repo = self._config.repo.replace("/", "_")
-        base_dir = Path(".websum_to_git") / "repos"
+        # 使用用户家目录下的固定缓存路径，避免因当前工作目录变化导致
+        # 出现嵌套的 `.websum_to_git/.websum_to_git/...` 结构
+        base_dir = Path.home() / ".websum_to_git" / "repos"
         base_dir.mkdir(parents=True, exist_ok=True)
         repo_dir = base_dir / safe_repo
         self._repo_dir = repo_dir
@@ -107,4 +109,3 @@ class GitHubPublisher:
         commit_hash = completed.stdout.strip() if completed.returncode == 0 else None
 
         return PublishResult(file_path=str(rel_path), commit_hash=commit_hash)
-
