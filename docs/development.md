@@ -113,13 +113,17 @@ logging.basicConfig(level=logging.DEBUG, ...)
 配置文件 `llm` 段支持：
 
 - `provider: "openai"`（默认）
-  - 使用 `openai` 官方 SDK，支持 `base_url` 自定义（用于兼容 OpenAI 格式服务）
+  - 使用 OpenAI Chat Completions API（`chat.completions.create`）
+  - 支持 `base_url` 自定义（用于兼容 OpenAI 格式服务）
+- `provider: "openai-response"`
+  - 使用 OpenAI Responses API（`responses.create`）
+  - 同样支持通过 `base_url` 连接兼容 Responses 格式的服务
 - `provider: "anthropic"`
   - 使用 `anthropic` 官方 SDK（messages API）
-  - `base_url` 字段目前忽略
+  - 若配置了 `base_url`，将作为自定义 Anthropic 兼容服务地址传入客户端
 - `provider: "gemini"`
   - 使用 `google-generativeai` SDK
-  - `base_url` 字段目前忽略
+  - 若配置了 `base_url`，会作为 `client_options.api_endpoint` 传入，用于连接 Gemini 兼容服务
 
 所有 provider 均共享字段：
 
@@ -194,4 +198,3 @@ logging.basicConfig(level=logging.DEBUG, ...)
   - `openspec/changes/add-tgbot-html-to-obsidian/specs/html-to-obsidian-sync/spec.md`
 
 如需对行为进行重大修改（如多格式输入、双向同步、增量更新等），建议先新增对应的 OpenSpec 变更再动手实现。
-

@@ -54,9 +54,9 @@ telegram:
   bot_token: "你的 Telegram Bot Token"
 
 llm:
-  # provider 可选: openai / anthropic / gemini
+  # provider 可选: openai / openai-response / anthropic / gemini
   provider: "openai"
-  # 对于 openai/provider 兼容服务，可通过 base_url 自定义地址
+  # 对于 openai/openai-response/anthropic/gemini 兼容服务，可通过 base_url 自定义地址
   base_url: "https://api.openai.com"
   api_key: "你的 LLM API Key"
   model: "gpt-4.1-mini"

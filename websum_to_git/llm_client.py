@@ -4,7 +4,6 @@ from typing import Any, Dict, List
 
 from .config import LLMConfig
 
-
 class LLMClient:
     def __init__(self, config: LLMConfig) -> None:
         self._config = config
@@ -19,11 +18,18 @@ class LLMClient:
         elif provider == "anthropic":
             import anthropic
 
-            self._client = anthropic.Anthropic(api_key=config.api_key)
+            client_kwargs: Dict[str, Any] = {"api_key": config.api_key}
+            if config.base_url:
+                client_kwargs["base_url"] = config.base_url
+            self._client = anthropic.Anthropic(**client_kwargs)
         elif provider == "gemini":
             import google.generativeai as genai
 
-            genai.configure(api_key=config.api_key)
+            client_kwargs: Dict[str, Any] = {"api_key": config.api_key}
+            if config.base_url:
+                # 部分 Gemini 兼容服务通过自定义 api_endpoint 暴露
+                client_kwargs["client_options"] = {"api_endpoint": config.base_url}
+            genai.configure(**client_kwargs)
             # 对于 Gemini，我们直接在构造阶段创建模型实例
             self._client = genai.GenerativeModel(config.model)
         else:
