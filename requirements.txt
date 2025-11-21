@@ -1,0 +1,7 @@
+requests
+pyyaml
+beautifulsoup4
+python-telegram-bot
+openai
+anthropic
+google-generativeai
