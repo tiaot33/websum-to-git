@@ -25,6 +25,7 @@
   - 从 YAML 加载配置并进行基本校验（必填字段）
 - `websum_to_git/html_processor.py`
   - `fetch_html(url)`: 使用 `requests` 获取 HTML
+  - `fetch_html_headless(url)`: 使用 Playwright + Chromium 渲染页面并返回最终 HTML/URL
   - `parse_page(url, html, final_url)`: 使用 `BeautifulSoup`:
     - 清理 `script/style/noscript`
     - 从 `<title>` 获取标题（fallback 为最终 URL）
@@ -39,7 +40,7 @@
     - 写入 Markdown 文件到 `target_dir`
     - `git add` / `git commit` / `git push`
 - `websum_to_git/pipeline.py`
-  - `HtmlToObsidianPipeline.process_url(url)`：组合所有步骤
+  - `HtmlToObsidianPipeline.process_url(url)`：根据 `http.fetch_mode` 选择 `fetch_html` 或 `fetch_html_headless`，随后组合所有步骤
   - `_build_markdown(...)`：整合 front matter + 摘要 + 图片列表
 - `websum_to_git/bot.py`
   - 消息匹配、URL 抽取、错误处理、运行入口（`run_bot`）
@@ -62,6 +63,14 @@ source .venv/bin/activate  # Windows 使用 .venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
+
+如需使用 `http.fetch_mode = headless`，请额外执行（首次即可）：
+
+```bash
+playwright install chromium
+```
+
+Linux 环境若报错缺少系统库，请按 [Playwright 官方要求](https://playwright.dev/python/docs/intro) 安装 `libnss3`、`libatk1.0-0`、`libx11-xcb1` 等依赖。
 
 3. 准备配置文件
 
@@ -87,6 +96,8 @@ python -m websum_to_git.main --config config.yaml
 2. 或在调试器中运行 `websum_to_git/main.py` 的 `main()`。
 
 3. 在 Telegram 中向 Bot 发送一个 HTML 页面 URL，观察日志与行为。
+
+若需要以容器方式调试，可使用 `docker compose up --build`，默认会挂载根目录下的 `config.yaml`。
 
 ### 日志
 

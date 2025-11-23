@@ -30,6 +30,8 @@ class TelegramConfig:
 class HttpConfig:
     # 控制抓取网页时是否校验证书；正常情况下应保持为 True
     verify_ssl: bool = True
+    # 控制抓取模式："requests" 或 "headless"
+    fetch_mode: str = "requests"
 
 
 @dataclass
@@ -84,8 +86,13 @@ def load_config(path: str | Path) -> AppConfig:
         pat=_require(github_raw, "pat"),
     )
 
+    fetch_mode = (http_raw.get("fetch_mode") or "requests").lower()
+    if fetch_mode not in {"requests", "headless"}:
+        raise ValueError("http.fetch_mode 必须为 'requests' 或 'headless'")
+
     http = HttpConfig(
         verify_ssl=http_raw.get("verify_ssl", True),
+        fetch_mode=fetch_mode,
     )
 
     return AppConfig(telegram=telegram, llm=llm, github=github, http=http)
