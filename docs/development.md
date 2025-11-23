@@ -145,7 +145,7 @@ logging.basicConfig(level=logging.DEBUG, ...)
 
 - 修改位置：`websum_to_git/pipeline.py:_build_markdown`
 - 当前结构：
-  - YAML front matter（`source_url`、`created_at`、`title`）
+  - YAML front matter（`source`、`created_at`、`title`）
   - `# 标题`
   - LLM 输出的摘要内容
   - 可选的 `## Images` + `![](url)` 列表

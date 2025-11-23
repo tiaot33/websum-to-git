@@ -121,7 +121,7 @@ class HtmlToObsidianPipeline:
 
         return self._publisher.publish_markdown(
             content=full_markdown,
-            source_url=page.final_url,
+            source=page.final_url,
             title=page.title,
         )
 
@@ -184,7 +184,7 @@ class HtmlToObsidianPipeline:
         now = datetime.now(timezone.utc).isoformat()
         front_matter_lines = [
             "---",
-            f"source_url: {page.final_url}",
+            f"source: {page.final_url}",
             f"created_at: {now}",
             f"title: {page.title}",
             "---",

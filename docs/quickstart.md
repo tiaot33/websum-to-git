@@ -131,7 +131,7 @@ Commit: <commit-hash>
 1. 将你的 GitHub 仓库目录作为 Obsidian Vault 打开（或作为子目录挂载）
 2. 在 `target_dir` 对应目录（例如 `notes/telegram`）中找到刚生成的 Markdown 文件
 3. 打开文件，你将看到：
-   - YAML front matter：包含 `source_url`、`created_at`、`title`
+   - YAML front matter：包含 `source`、`created_at`、`title`
    - LLM 生成的正文摘要
    - 末尾的 `## Images` 段落，列出正文中出现的图片（`![](url)`）
 

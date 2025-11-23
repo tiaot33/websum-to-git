@@ -28,13 +28,18 @@ class GitHubPublisher:
         )
         self._api_base = "https://api.github.com"
 
-    def publish_markdown(self, *, content: str, source_url: str, title: str) -> PublishResult:
+    def publish_markdown(
+        self, *, content: str, source: str, title: str
+    ) -> PublishResult:
         if not self._config.repo or not self._config.pat:
             raise ValueError("GitHub 配置缺失 repo 或 pat")
 
         now = datetime.now(timezone.utc)
         timestamp_str = now.strftime("%Y%m%d-%H%M%S")
-        safe_title = "".join(c if c.isalnum() or c in "-_" else "-" for c in title)[:60] or "note"
+        safe_title = (
+            "".join(c if c.isalnum() or c in "-_" else "-" for c in title)[:60]
+            or "note"
+        )
         filename = f"{timestamp_str}-{safe_title}.md"
 
         if self._config.target_dir:
@@ -45,7 +50,7 @@ class GitHubPublisher:
 
         encoded_content = base64.b64encode(content.encode("utf-8")).decode("ascii")
 
-        commit_message = f"Add note from {source_url} at {timestamp_str}"
+        commit_message = f"Add note from {source} at {timestamp_str}"
 
         url = f"{self._api_base}/repos/{self._config.repo}/contents/{path}"
         payload = {
