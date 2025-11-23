@@ -70,6 +70,42 @@
   - 你配置的 LLM 服务（OpenAI / Anthropic / Gemini 等）
   - GitHub（用于 git clone / push）
 
+## 抓取模式与 Playwright
+
+`config.yaml` 中的 `http.fetch_mode` 决定抓取网页的方式：
+
+- `requests`（默认）：直接使用 `requests` 抓取 HTML，速度快，适合大多数静态页面
+- `headless`：通过 Playwright + Chromium 渲染页面后再提取 HTML，适合依赖 JS 渲染或懒加载的页面
+
+启用 `headless` 时请先安装浏览器内核：
+
+```bash
+playwright install chromium
+```
+
+在 Linux 服务器上如遇到缺失系统依赖，可参考 [Playwright 官方文档](https://playwright.dev/python/docs/intro) 安装 `libnss3`、`libatk1.0-0`、`libx11-xcb1` 等必要库。
+
+## Docker 部署
+
+仓库根目录提供了 `Dockerfile`，基于 `mcr.microsoft.com/playwright/python` 构建，已预装 Chromium：
+
+```bash
+docker build -t websum-to-git .
+docker run --rm \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  websum-to-git
+```
+
+如需使用自定义配置路径，可在 `docker run` 时覆盖命令，例如：`docker run ... websum-to-git python -m websum_to_git.main --config /app/your-config.yaml`。
+
+也可使用 `docker-compose.yaml`：
+
+```bash
+docker compose up --build -d
+```
+
+确保在同级目录放置 `config.yaml`（或通过修改 compose 文件绑定其他配置路径）。
+
 ## 安全注意事项
 
 - **不要** 将真实的 `config.yaml` 提交到 Git 仓库
@@ -86,4 +122,3 @@
 - SOLID：
   - 单一职责：`html_processor`、`llm_client`、`github_client`、`pipeline`、`bot` 各司其职
   - 依赖倒置：核心流程依赖配置与抽象封装，而非具体实现细节
-

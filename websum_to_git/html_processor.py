@@ -8,6 +8,10 @@ import requests
 from bs4 import BeautifulSoup
 
 
+class HeadlessFetchError(RuntimeError):
+    """Headless 抓取过程中出现的异常。"""
+
+
 @dataclass
 class PageContent:
     url: str
@@ -21,6 +25,44 @@ def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> Tuple[str, s
     resp = requests.get(url, timeout=timeout, verify=verify)
     resp.raise_for_status()
     return resp.text, resp.url
+
+
+def fetch_html_headless(url: str, timeout: int = 15) -> Tuple[str, str]:
+    """使用 Playwright 抓取 HTML，返回 (html, final_url)。"""
+
+    try:
+        from playwright.sync_api import (  # type: ignore import-not-found
+            TimeoutError as PlaywrightTimeoutError,
+            sync_playwright,
+        )
+    except ModuleNotFoundError as exc:  # pragma: no cover - 运行期缺依赖
+        raise HeadlessFetchError(
+            "Playwright 未安装，请执行 `pip install playwright` 并运行 `playwright install chromium`"
+        ) from exc
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context()
+            page = context.new_page()
+
+            try:
+                page.goto(
+                    url,
+                    timeout=max(timeout, 1) * 1000,
+                    wait_until="networkidle",
+                )
+                html = page.content()
+                final_url = page.url
+            finally:
+                context.close()
+                browser.close()
+    except PlaywrightTimeoutError as exc:
+        raise HeadlessFetchError(f"Headless 抓取超时: {url}") from exc
+    except Exception as exc:  # pragma: no cover - 多种底层异常
+        raise HeadlessFetchError(f"Headless 抓取失败: {url}") from exc
+
+    return html, final_url
 
 
 def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent:

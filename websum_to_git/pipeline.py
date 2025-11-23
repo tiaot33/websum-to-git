@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from .config import AppConfig
 from .github_client import GitHubPublisher, PublishResult
-from .html_processor import PageContent, fetch_html, parse_page
+from .html_processor import PageContent, fetch_html, fetch_html_headless, parse_page
 from .llm_client import LLMClient
 
 
@@ -15,10 +15,13 @@ class HtmlToObsidianPipeline:
         self._publisher = GitHubPublisher(config.github)
 
     def process_url(self, url: str) -> PublishResult:
-        html, final_url = fetch_html(
-            url,
-            verify=self._config.http.verify_ssl,
-        )
+        if self._config.http.fetch_mode == "headless":
+            html, final_url = fetch_html_headless(url)
+        else:
+            html, final_url = fetch_html(
+                url,
+                verify=self._config.http.verify_ssl,
+            )
         page = parse_page(url=url, html=html, final_url=final_url)
 
         summary_md = self._llm.summarize_page(
@@ -60,4 +63,3 @@ class HtmlToObsidianPipeline:
             body_lines.append("")
 
         return "\n".join(front_matter_lines + body_lines)
-

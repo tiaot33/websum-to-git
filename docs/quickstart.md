@@ -25,6 +25,12 @@ source .venv/bin/activate  # Windows 用 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+如需启用无头浏览器模式，请额外运行（首次即可）：
+
+```bash
+playwright install chromium
+```
+
 ## 2. 准备必要账号与凭证
 
 你需要：
@@ -71,9 +77,13 @@ http:
   # 可选：是否在抓取网页时校验 HTTPS 证书
   # 正常情况下请保持为 true；若本地环境证书链异常导致 SSLError，可暂时设为 false（存在安全风险）
   verify_ssl: true
+  # 抓取模式，可选: requests（默认，使用 requests 抓取）/ headless（Playwright Chromium）
+  fetch_mode: "requests"
 ```
 
 > 提示：请务必不要将包含真实密钥的 `config.yaml` 提交到 GitHub 公共仓库。
+
+若你将 `fetch_mode` 设置为 `headless`，请确保已执行前述 `playwright install chromium`，并在 Linux 服务器上按 Playwright 官方文档安装所需的系统库（如 `libnss3`、`libatk1.0-0` 等）。
 
 ## 4. 运行服务
 
@@ -88,6 +98,14 @@ python -m websum_to_git.main --config config.yaml
 ```text
 INFO telegram.ext._application - Application started
 ```
+
+若希望通过容器运行，可使用仓库提供的 `docker-compose.yaml`：
+
+```bash
+docker compose up --build -d
+```
+
+确保 `config.yaml` 位于项目根目录，并已绑定到容器中的 `/app/config.yaml`（默认 compose 文件已完成此映射）。
 
 ## 5. 在 Telegram 中使用
 
