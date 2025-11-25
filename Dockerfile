@@ -9,6 +9,6 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && playwright install chromium
 
-COPY . .
+COPY src ./
 
-CMD ["python", "-m", "websum_to_git.main", "--config", "/app/config.yaml"]
+CMD ["python", "src/main.py", "--config", "/app/config.yaml"]

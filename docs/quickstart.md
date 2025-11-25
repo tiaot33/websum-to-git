@@ -90,7 +90,7 @@ http:
 在项目根目录执行：
 
 ```bash
-python -m websum_to_git.main --config config.yaml
+python  src/main.py --config config.yaml
 ```
 
 启动成功后，你应当能在控制台看到类似：

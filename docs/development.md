@@ -90,12 +90,12 @@ cp config.example.yaml config.yaml
 1. 直接运行模块入口：
 
 ```bash
-python -m websum_to_git.main --config config.yaml
+python src/main.py --config config.yaml
 ```
 
-2. 或在调试器中运行 `websum_to_git/main.py` 的 `main()`。
+1. 或在调试器中运行 `main.py` 的 `main()`。
 
-3. 在 Telegram 中向 Bot 发送一个 HTML 页面 URL，观察日志与行为。
+2. 在 Telegram 中向 Bot 发送一个 HTML 页面 URL，观察日志与行为。
 
 若需要以容器方式调试，可使用 `docker compose up --build`，默认会挂载根目录下的 `config.yaml`。
 
@@ -109,15 +109,6 @@ logging.basicConfig(level=logging.DEBUG, ...)
 
 或在单个模块中增加更细粒度的日志。
 
-## 扩展与修改建议
-
-### 修改 LLM 提示词或模型
-
-- 修改位置：`websum_to_git/llm_client.py:23` 的 `system_prompt`
-- 修改模型：在配置文件 `config.yaml` 中调整 `llm.model`
-- 定制建议：
-  - 若 Obsidian 有统一模版，可在 system prompt 中要求固定结构
-  - 若需要中英双语总结，也可以在 prompt 中显式说明
 
 #### 选择不同的 LLM Provider
 

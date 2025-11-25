@@ -96,7 +96,7 @@ docker run --rm \
   websum-to-git
 ```
 
-如需使用自定义配置路径，可在 `docker run` 时覆盖命令，例如：`docker run ... websum-to-git python -m websum_to_git.main --config /app/your-config.yaml`。
+如需使用自定义配置路径，可在 `docker run` 时覆盖命令，例如：`docker run ... websum-to-git python src/main.py --config /app/your-config.yaml`。
 
 也可使用 `docker-compose.yaml`：
 
