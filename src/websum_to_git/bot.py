@@ -4,7 +4,6 @@ import asyncio
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 from telegram import Update
 from telegram.ext import (
@@ -23,7 +22,7 @@ logger = logging.getLogger(__name__)
 URL_REGEX = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 
 
-def extract_first_url(text: str) -> Optional[str]:
+def extract_first_url(text: str) -> str | None:
     match = URL_REGEX.search(text)
     return match.group(0) if match else None
 
@@ -72,4 +71,3 @@ def run_bot(config_path: str | Path = "config.yaml") -> None:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_app.handle_message))
 
     app.run_polling()
-

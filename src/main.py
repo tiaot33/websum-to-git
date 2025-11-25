@@ -4,7 +4,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from .bot import run_bot
+from websum_to_git.bot import run_bot
 
 
 def main() -> None:
@@ -27,4 +27,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

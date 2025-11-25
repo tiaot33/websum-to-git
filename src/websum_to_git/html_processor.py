@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Tuple
 from urllib.parse import urljoin
 
 import requests
@@ -49,7 +48,7 @@ class PageContent:
     article_html: str
 
 
-def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> Tuple[str, str]:
+def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> tuple[str, str]:
     """使用 requests 获取 HTML 内容。
 
     Returns:
@@ -65,7 +64,7 @@ def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> Tuple[str, s
     return resp.text, resp.url
 
 
-def fetch_html_headless(url: str, timeout: int = 15) -> Tuple[str, str]:
+def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
     """使用 Playwright 抓取 HTML，返回 (html, final_url)。"""
 
     try:
@@ -105,9 +104,9 @@ def fetch_html_headless(url: str, timeout: int = 15) -> Tuple[str, str]:
     return html, final_url
 
 
-def _extract_images(soup: BeautifulSoup, base_url: str) -> List[str]:
+def _extract_images(soup: BeautifulSoup, base_url: str) -> list[str]:
     """从 BeautifulSoup 对象中提取图片 URL 列表。"""
-    image_urls: List[str] = []
+    image_urls: list[str] = []
     for img in soup.find_all("img"):
         src = img.get("src")
         if not src:
@@ -167,5 +166,5 @@ def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent
         text=text,
         markdown=markdown,
         raw_html=html,
-        article_html=article_html
+        article_html=article_html,
     )

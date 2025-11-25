@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import yaml
 
@@ -42,7 +42,7 @@ class AppConfig:
     http: HttpConfig
 
 
-def _require(mapping: Dict[str, Any], key: str) -> Any:
+def _require(mapping: dict[str, Any], key: str) -> Any:
     if key not in mapping or mapping[key] in ("", None):
         raise ValueError(f"配置缺少必填字段: {key}")
     return mapping[key]

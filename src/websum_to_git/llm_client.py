@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from .config import LLMConfig
 
@@ -19,14 +19,14 @@ class LLMClient:
         elif provider == "anthropic":
             import anthropic
 
-            client_kwargs: Dict[str, Any] = {"api_key": config.api_key}
+            client_kwargs: dict[str, Any] = {"api_key": config.api_key}
             if config.base_url:
                 client_kwargs["base_url"] = config.base_url
             self._client = anthropic.Anthropic(**client_kwargs)
         elif provider == "gemini":
             import google.generativeai as genai
 
-            client_kwargs: Dict[str, Any] = {"api_key": config.api_key}
+            client_kwargs: dict[str, Any] = {"api_key": config.api_key}
             if config.base_url:
                 # 部分 Gemini 兼容服务通过自定义 api_endpoint 暴露
                 client_kwargs["client_options"] = {"api_endpoint": config.base_url}
@@ -56,7 +56,7 @@ class LLMClient:
 
     def _generate_with_openai(self, system_prompt: str | None, user_content: str) -> str:
         # OpenAI / OpenAI 兼容 API，使用官方 SDK 的 chat.completions
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_content})
@@ -71,7 +71,7 @@ class LLMClient:
     def _generate_with_openai_response(self, system_prompt: str | None, user_content: str) -> str:
         # OpenAI Responses API，支持新一代统一输入输出格式
         # 对于兼容 Responses 的服务，可配置 provider=openai-response
-        input_segments: List[Dict[str, Any]] = []
+        input_segments: list[dict[str, Any]] = []
         if system_prompt:
             input_segments.append({"role": "system", "content": system_prompt})
         input_segments.append({"role": "user", "content": user_content})
@@ -82,7 +82,7 @@ class LLMClient:
             temperature=0.2,
         )
 
-        parts: List[str] = []
+        parts: list[str] = []
         for item in getattr(resp, "output", []) or []:
             for content in getattr(item, "content", []) or []:
                 text = getattr(content, "text", None)
@@ -100,7 +100,7 @@ class LLMClient:
 
     def _generate_with_anthropic(self, system_prompt: str | None, user_content: str) -> str:
         # Anthropic 原生 SDK，使用 messages API
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": self._config.model,
             "max_tokens": 4096,
             "temperature": 0.2,
@@ -111,7 +111,7 @@ class LLMClient:
 
         resp = self._client.messages.create(**kwargs)
 
-        parts: List[str] = []
+        parts: list[str] = []
         for block in getattr(resp, "content", []) or []:
             if getattr(block, "type", None) == "text":
                 parts.append(getattr(block, "text", ""))
@@ -124,7 +124,7 @@ class LLMClient:
     def _generate_with_gemini(self, system_prompt: str | None, user_content: str) -> str:
         # Gemini (Google Generative AI) SDK
         # 通过将 system_prompt + user_content 作为多段输入，引导模型输出
-        contents: List[str] = []
+        contents: list[str] = []
         if system_prompt:
             contents.append(system_prompt)
         contents.append(user_content)

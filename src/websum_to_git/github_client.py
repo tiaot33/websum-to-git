@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -28,18 +28,13 @@ class GitHubPublisher:
         )
         self._api_base = "https://api.github.com"
 
-    def publish_markdown(
-        self, *, content: str, source: str, title: str
-    ) -> PublishResult:
+    def publish_markdown(self, *, content: str, source: str, title: str) -> PublishResult:
         if not self._config.repo or not self._config.pat:
             raise ValueError("GitHub 配置缺失 repo 或 pat")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         timestamp_str = now.strftime("%Y%m%d-%H%M%S")
-        safe_title = (
-            "".join(c if c.isalnum() or c in "-_" else "-" for c in title)[:60]
-            or "note"
-        )
+        safe_title = "".join(c if c.isalnum() or c in "-_" else "-" for c in title)[:60] or "note"
         filename = f"{timestamp_str}-{safe_title}.md"
 
         if self._config.target_dir:
@@ -61,9 +56,7 @@ class GitHubPublisher:
 
         response = self._session.put(url, json=payload, timeout=10)
         if response.status_code not in (200, 201):
-            raise RuntimeError(
-                f"GitHub API 创建文件失败: {response.status_code} {response.text}"
-            )
+            raise RuntimeError(f"GitHub API 创建文件失败: {response.status_code} {response.text}")
 
         data = response.json()
         commit_hash: str | None = None

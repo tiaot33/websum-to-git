@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .config import AppConfig
 from .github_client import GitHubPublisher, PublishResult
 from .html_processor import PageContent, fetch_html, fetch_html_headless, parse_page
 from .llm_client import LLMClient
-
 
 # 近似控制每次请求的输入规模（按字符近似 token，主要面向中文场景）
 _MAX_SUMMARY_INPUT_CHARS = 10_000
@@ -134,9 +133,7 @@ class HtmlToObsidianPipeline:
         # 内容较短时，直接一次性总结
         if len(text) <= _MAX_SUMMARY_INPUT_CHARS:
             user_content = (
-                f"网页标题: {page.title}\n"
-                f"网页地址: {page.final_url}\n\n"
-                f"网页正文内容（已去除脚本等噪音标签）:\n{text}\n"
+                f"网页标题: {page.title}\n网页地址: {page.final_url}\n\n网页正文内容（已去除脚本等噪音标签）:\n{text}\n"
             )
             return self._llm.generate(
                 system_prompt=_FINAL_SUMMARY_SYSTEM_PROMPT,
@@ -162,9 +159,7 @@ class HtmlToObsidianPipeline:
             ).strip()
             if chunk_summary:
                 # 只在汇总输入中保留必要的标记信息，避免额外噪音
-                chunk_summaries.append(
-                    f"片段 {idx}/{total} 的要点摘要：\n{chunk_summary}"
-                )
+                chunk_summaries.append(f"片段 {idx}/{total} 的要点摘要：\n{chunk_summary}")
 
         merged_summary_input = "\n\n".join(chunk_summaries)
 
@@ -181,7 +176,7 @@ class HtmlToObsidianPipeline:
         ).strip()
 
     def _build_markdown(self, *, page: PageContent, summary_markdown: str) -> str:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         front_matter_lines = [
             "---",
             f"source: {page.final_url}",
