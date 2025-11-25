@@ -6,3 +6,5 @@ openai
 anthropic
 google-generativeai
 playwright
+readability-lxml
+markdownify

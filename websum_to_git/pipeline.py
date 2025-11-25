@@ -197,11 +197,4 @@ class HtmlToObsidianPipeline:
         body_lines.append(summary_markdown.strip())
         body_lines.append("")
 
-        if page.image_urls:
-            body_lines.append("## Images")
-            body_lines.append("")
-            for img in page.image_urls:
-                body_lines.append(f"![]({img})")
-            body_lines.append("")
-
         return "\n".join(front_matter_lines + body_lines)

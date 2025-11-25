@@ -6,6 +6,8 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from markdownify import markdownify as md
+from readability import Document
 
 DEFAULT_HEADERS = {
     # 模拟常见桌面浏览器，降低被简单反爬和 UA 黑名单拦截的概率
@@ -18,20 +20,41 @@ DEFAULT_HEADERS = {
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     "Connection": "keep-alive",
 }
+
+
 class HeadlessFetchError(RuntimeError):
     """Headless 抓取过程中出现的异常。"""
 
 
 @dataclass
 class PageContent:
+    """网页内容数据结构。
+
+    Attributes:
+        url: 原始请求 URL
+        final_url: 最终 URL（可能经过重定向）
+        title: 网页标题
+        text: 纯文本内容（用于 LLM 摘要）
+        markdown: Markdown 格式的正文内容
+        raw_html: 原始 HTML（完整网页）
+        article_html: 提取后的文章 HTML（Readability 处理后）
+    """
+
     url: str
     final_url: str
     title: str
     text: str
-    image_urls: List[str]
+    markdown: str
+    raw_html: str
+    article_html: str
 
 
 def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> Tuple[str, str]:
+    """使用 requests 获取 HTML 内容。
+
+    Returns:
+        (html, final_url) 元组
+    """
     resp = requests.get(
         url,
         timeout=timeout,
@@ -48,6 +71,8 @@ def fetch_html_headless(url: str, timeout: int = 15) -> Tuple[str, str]:
     try:
         from playwright.sync_api import (  # type: ignore import-not-found
             TimeoutError as PlaywrightTimeoutError,
+        )
+        from playwright.sync_api import (
             sync_playwright,
         )
     except ModuleNotFoundError as exc:  # pragma: no cover - 运行期缺依赖
@@ -80,32 +105,67 @@ def fetch_html_headless(url: str, timeout: int = 15) -> Tuple[str, str]:
     return html, final_url
 
 
-def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent:
-    final_url = final_url or url
-    soup = BeautifulSoup(html, "html.parser")
-
-    for tag in soup(["script", "style", "noscript"]):
-        tag.decompose()
-
-    title_tag = soup.find("title")
-    title = (title_tag.get_text(strip=True) if title_tag else "").strip() or final_url
-
-    body = soup.body or soup
-    text = body.get_text(separator="\n", strip=True)
-
+def _extract_images(soup: BeautifulSoup, base_url: str) -> List[str]:
+    """从 BeautifulSoup 对象中提取图片 URL 列表。"""
     image_urls: List[str] = []
-    for img in body.find_all("img"):
+    for img in soup.find_all("img"):
         src = img.get("src")
         if not src:
             continue
-        full = urljoin(final_url, src)
+        full = urljoin(base_url, src)
         if full not in image_urls:
             image_urls.append(full)
+    return image_urls
+
+
+def _html_to_markdown(html: str) -> str:
+    """将 HTML 转换为 Markdown 格式。
+
+    使用 markdownify 库进行转换，配置适合文章阅读的选项。
+    """
+    return md(
+        html,
+        heading_style="ATX",  # 使用 # 风格标题
+        bullets="-",  # 使用 - 作为列表符号
+        code_language="",  # 不猜测代码语言
+        strip=["script", "style", "noscript"],  # 移除脚本和样式
+    ).strip()
+
+
+def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent:
+    """解析 HTML 页面，使用 Readability 提取正文并转换为 Markdown。
+
+    Args:
+        url: 原始请求 URL
+        html: 完整的 HTML 内容
+        final_url: 最终 URL（可能经过重定向）
+
+    Returns:
+        PageContent 对象，包含提取的内容和原始 HTML
+    """
+    final_url = final_url or url
+
+    # 使用 readability-lxml 提取正文
+    doc = Document(html)
+    title = doc.title() or final_url
+    article_html = doc.summary()
+    # 转换为 Markdown
+    markdown = _html_to_markdown(article_html)
+
+    # 解析文章 HTML 获取纯文本和图片
+    article_soup = BeautifulSoup(article_html, "html.parser")
+    # 移除不需要的标签
+    for tag in article_soup(["script", "style", "noscript"]):
+        tag.decompose()
+    # 提取纯文本（用于 LLM 摘要）
+    text = article_soup.get_text(separator="\n", strip=True)
 
     return PageContent(
         url=url,
         final_url=final_url,
         title=title,
         text=text,
-        image_urls=image_urls,
+        markdown=markdown,
+        raw_html=html,
+        article_html=article_html
     )
