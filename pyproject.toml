@@ -1,0 +1,47 @@
+[project]
+name = "websum-to-git"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "tiaot33", email = "lyq12123@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "requests",
+    "pyyaml",
+    "beautifulsoup4",
+    "python-telegram-bot",
+    "openai",
+    "anthropic",
+    "google-generativeai",
+    "playwright",
+    "readability-lxml",
+    "markdownify"
+]
+
+[project.scripts]
+web-sum-to-git = "websum_to_git:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18.2",
+    "ruff>=0.14.6",
+]
+[tool.ruff]
+# Set the maximum line length to 120.
+line-length = 120
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "W",   # pycodestyle
+    "F",   # Pyflakes
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "I",   # isort
+]
