@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from .config import AppConfig
 from .github_client import GitHubPublisher, PublishResult
@@ -11,37 +13,29 @@ from .markdown_chunker import split_markdown_into_chunks
 # 近似控制每次请求的输入规模（按字符近似 token，主要面向中文场景）
 _MAX_SUMMARY_INPUT_CHARS = 10_000
 
-_CHUNK_SUMMARY_SYSTEM_PROMPT = (
-    "你是一个网页内容分析助手，用于处理长文的单个片段。\n"
-    "目标：将该片段中的核心信息提炼成简洁的要点，供后续对整篇文章进行汇总。\n"
-    "请在内部按步骤思考，但最终只输出要点列表，不要输出任何思考过程或解释。\n"
-    "约束：\n"
-    "1. 只关注正文内容，忽略导航栏、侧边栏、页脚、评论区、推荐阅读、广告、Cookie 提示等与正文无关的噪音。\n"
-    "2. 对示意图、流程图、步骤图、表格、代码示例等，如果有文字描述或关键结论，请保留这些信息，并在要点中用文字说明。\n"
-    "3. 使用简洁的中文；优先使用无序列表，每条要点表达一个关键信息。\n"
-    "4. 不要生成 Markdown 标题，不要生成 YAML front matter，不要生成图片链接或附件标记。\n"
-)
+# 提示词文件路径
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-_FINAL_SUMMARY_SYSTEM_PROMPT = (
-    "你是一个知识管理助手，负责将网页内容整理为适合 Obsidian 的 Markdown 笔记。\n"
-    "请在内部按步骤思考，但最终只输出符合要求的 Markdown，不要输出任何分析过程或解释。\n"
-    "整体要求：\n"
-    "1. 只总结网页中的正文内容，忽略导航栏、侧边栏、页脚、评论区、推荐阅读、广告、Cookie 提示等噪音。\n"
-    "2. 对示意图、流程图、步骤图、表格、代码示例等，保留其核心含义和关键步骤，用文字形式表达出来。\n"
-    "3. 使用简洁自然的中文。\n"
-    "4. 输出结构清晰的 Markdown，从二级标题 (##) 开始，不要使用一级标题 (#)，也不要生成 YAML front matter。\n"
-    "5. 不要包含任何图片链接或附件标记，图片会由系统自动附加。\n"
-    "推荐结构：\n"
-    "## 摘要\n"
-    "- 用 3-5 句话概括全文的核心内容。\n"
-    "## 关键观点\n"
-    "- 列出文章中最重要的结论或观点，每点一行。\n"
-    "## 重要细节\n"
-    "- 按主题分组列出支撑关键观点的重要细节、示例或数据。\n"
-    "## 可执行要点\n"
-    "- 如果文章包含步骤、流程或实践建议，将其整理为清晰的操作要点；\n"
-    "- 如果没有明确的行动建议，可以简单说明“此文主要为背景和概念介绍，没有明确可执行步骤”。\n"
-)
+
+def _load_prompt(name: str) -> str:
+    """从 prompts 目录加载提示词文件。"""
+    return (_PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8").strip()
+
+
+@dataclass
+class SummaryResult:
+    """LLM 总结结果，包含精炼标题和正文内容。"""
+    ai_title: str
+    content: str
+
+
+def _parse_summary_result(raw_output: str) -> SummaryResult:
+    """从 LLM 输出中解析第一行作为标题，其余作为内容。"""
+    raw_output = raw_output.strip()
+    lines = raw_output.split("\n", 1)
+    ai_title = lines[0].strip()
+    content = lines[1].strip() if len(lines) > 1 else ""
+    return SummaryResult(ai_title=ai_title, content=content)
 
 
 class HtmlToObsidianPipeline:
@@ -60,9 +54,12 @@ class HtmlToObsidianPipeline:
             )
         page = parse_page(url=url, html=html, final_url=final_url)
 
-        summary_md = self._summarize_page(page)
+        summary_result = self._summarize_page(page)
 
-        full_markdown = self._build_markdown(page=page, summary_markdown=summary_md)
+        full_markdown = self._build_markdown(
+            page=page,
+            summary_result=summary_result,
+        )
 
         return self._publisher.publish_markdown(
             content=full_markdown,
@@ -70,26 +67,27 @@ class HtmlToObsidianPipeline:
             title=page.title,
         )
 
-    def _summarize_page(self, page: PageContent) -> str:
+    def _summarize_page(self, page: PageContent) -> SummaryResult:
         """将网页正文内容转换为适合 Obsidian 的 Markdown 摘要。"""
         text = page.markdown.strip()
         if not text:
-            return "（页面中未提取到正文内容）"
+            return SummaryResult(ai_title=page.title, content="（页面中未提取到正文内容）")
 
         # 内容较短时，直接一次性总结
         if len(text) <= _MAX_SUMMARY_INPUT_CHARS:
             user_content = (
                 f"网页标题: {page.title}\n网页地址: {page.final_url}\n\n网页正文内容（已去除脚本等噪音标签）:\n{text}\n"
             )
-            return self._llm.generate(
-                system_prompt=_FINAL_SUMMARY_SYSTEM_PROMPT,
+            raw_output = self._llm.generate(
+                system_prompt=_load_prompt("final_summary"),
                 user_content=user_content,
             ).strip()
+            return _parse_summary_result(raw_output)
 
-        # 内容较长时，按 Markdown 块结构分 chunk + 分块总结 + 汇总
+        # 内容较长时，按 Markdown 块结构分 chunk，每个 chunk 独立生成完整总结后拼接
         chunks = split_markdown_into_chunks(text, _MAX_SUMMARY_INPUT_CHARS)
 
-        chunk_summaries: list[str] = []
+        chunk_results: list[SummaryResult] = []
         total = len(chunks)
         for idx, chunk in enumerate(chunks, start=1):
             chunk_user_content = (
@@ -98,30 +96,33 @@ class HtmlToObsidianPipeline:
                 f"当前片段: {idx}/{total}\n\n"
                 f"片段正文内容:\n{chunk}\n"
             )
-            chunk_summary = self._llm.generate(
-                system_prompt=_CHUNK_SUMMARY_SYSTEM_PROMPT,
+            raw_output = self._llm.generate(
+                system_prompt=_load_prompt("final_summary"),
                 user_content=chunk_user_content,
             ).strip()
-            if chunk_summary:
-                # 只在汇总输入中保留必要的标记信息，避免额外噪音
-                chunk_summaries.append(f"片段 {idx}/{total} 的要点摘要：\n{chunk_summary}")
+            if raw_output:
+                chunk_results.append(_parse_summary_result(raw_output))
 
-        merged_summary_input = "\n\n".join(chunk_summaries)
+        if not chunk_results:
+            return SummaryResult(ai_title=page.title, content="（无法生成总结）")
 
-        final_user_content = (
-            f"网页标题: {page.title}\n"
-            f"网页地址: {page.final_url}\n\n"
-            "下面是该网页按片段总结后的要点，请综合这些信息生成一份完整的 Markdown 笔记：\n\n"
-            f"{merged_summary_input}\n"
-        )
+        # 使用第一个 chunk 的标题作为整体标题
+        ai_title = chunk_results[0].ai_title
 
-        return self._llm.generate(
-            system_prompt=_FINAL_SUMMARY_SYSTEM_PROMPT,
-            user_content=final_user_content,
-        ).strip()
+        # 拼接所有 chunk 的总结内容
+        merged_content_parts: list[str] = []
+        for idx, result in enumerate(chunk_results, start=1):
+            if len(chunk_results) > 1:
+                merged_content_parts.append(f"## 第 {idx} 部分\n\n{result.content}")
+            else:
+                merged_content_parts.append(result.content)
 
-    def _build_markdown(self, *, page: PageContent, summary_markdown: str) -> str:
+        merged_content = "\n\n---\n\n".join(merged_content_parts)
+        return SummaryResult(ai_title=ai_title, content=merged_content)
+
+    def _build_markdown(self, *, page: PageContent, summary_result: SummaryResult) -> str:
         now = datetime.now(UTC).isoformat()
+        # YAML front matter 中保留原始网页标题
         front_matter_lines = [
             "---",
             f"source: {page.final_url}",
@@ -131,10 +132,19 @@ class HtmlToObsidianPipeline:
             "",
         ]
 
+        # 正文使用 AI 生成的精炼标题
         body_lines: list[str] = []
-        body_lines.append(f"# {page.title}")
+        body_lines.append(f"# {summary_result.ai_title}")
         body_lines.append("")
-        body_lines.append(summary_markdown.strip())
+        body_lines.append(summary_result.content.strip())
+        body_lines.append("")
+
+        # 附加页面原文
+        body_lines.append("---")
+        body_lines.append("")
+        body_lines.append("## 原文")
+        body_lines.append("")
+        body_lines.append(page.markdown.strip())
         body_lines.append("")
 
         return "\n".join(front_matter_lines + body_lines)
