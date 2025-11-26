@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -103,20 +102,6 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
 
     return html, final_url
 
-
-def _extract_images(soup: BeautifulSoup, base_url: str) -> list[str]:
-    """从 BeautifulSoup 对象中提取图片 URL 列表。"""
-    image_urls: list[str] = []
-    for img in soup.find_all("img"):
-        src = img.get("src")
-        if not src:
-            continue
-        full = urljoin(base_url, src)
-        if full not in image_urls:
-            image_urls.append(full)
-    return image_urls
-
-
 def _html_to_markdown(html: str) -> str:
     """将 HTML 转换为 Markdown 格式。
 
@@ -146,7 +131,7 @@ def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent
 
     # 使用 readability-lxml 提取正文
     doc = Document(html)
-    title = doc.title() or final_url
+    title = doc.title() or ""
     article_html = doc.summary()
     # 转换为 Markdown
     markdown = _html_to_markdown(article_html)
