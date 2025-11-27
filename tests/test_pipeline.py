@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from websum_to_git.github_client import PublishResult
 from websum_to_git.html_processor import PageContent
@@ -164,9 +165,7 @@ class TestHtmlToObsidianPipeline:
     # process_url 端到端测试
     # --------------------------------------------------------
 
-    def test_process_url_full_flow(
-        self, mock_pipeline: HtmlToObsidianPipeline, sample_html: str
-    ) -> None:
+    def test_process_url_full_flow(self, mock_pipeline: HtmlToObsidianPipeline, sample_html: str) -> None:
         """完整的 URL 处理流程。"""
         with patch("websum_to_git.pipeline.fetch_html") as mock_fetch:
             mock_fetch.return_value = (sample_html, "https://example.com/python")
@@ -183,12 +182,10 @@ class TestHtmlToObsidianPipeline:
                 )
 
                 # 模拟 LLM 返回
-                _get_llm_mock(mock_pipeline).generate.return_value = (
-                    "Python 入门指南\n\n> Python 是现代编程的基础...\n\n## 核心概念"
-                )
-                _get_fast_llm_mock(mock_pipeline).generate.return_value = (
-                    "Python\nProgramming\nTutorial"
-                )
+                _get_llm_mock(
+                    mock_pipeline
+                ).generate.return_value = "Python 入门指南\n\n> Python 是现代编程的基础...\n\n## 核心概念"
+                _get_fast_llm_mock(mock_pipeline).generate.return_value = "Python\nProgramming\nTutorial"
 
                 result = mock_pipeline.process_url("https://example.com/python")
 
@@ -198,9 +195,7 @@ class TestHtmlToObsidianPipeline:
                 # 验证 publish_markdown 被调用
                 _get_publisher_mock(mock_pipeline).publish_markdown.assert_called_once()
 
-    def test_process_url_with_headless_mode(
-        self, sample_app_config: AppConfig, sample_html: str
-    ) -> None:
+    def test_process_url_with_headless_mode(self, sample_app_config: AppConfig, sample_html: str) -> None:
         """使用 headless 模式抓取。"""
         sample_app_config.http.fetch_mode = "headless"
 
@@ -234,6 +229,109 @@ class TestHtmlToObsidianPipeline:
 
             mock_fetch.assert_called_once()
 
+    def test_process_url_requests_failure_falls_back_to_headless(
+        self,
+        mock_pipeline: HtmlToObsidianPipeline,
+        sample_html: str,
+        sample_page_content: PageContent,
+    ) -> None:
+        """requests 抓取失败时应自动尝试 headless。"""
+        with (
+            patch("websum_to_git.pipeline.fetch_html") as mock_fetch,
+            patch("websum_to_git.pipeline.fetch_html_headless") as mock_headless,
+            patch("websum_to_git.pipeline.fetch_html_via_mirror") as mock_mirror,
+            patch("websum_to_git.pipeline.parse_page") as mock_parse,
+        ):
+            mock_fetch.side_effect = requests.HTTPError("403 Forbidden")
+            mock_headless.return_value = (sample_html, "https://example.com/python")
+            mock_mirror.return_value = (sample_html, "https://mirror.example.com/python")
+            mock_parse.return_value = sample_page_content
+
+            result = mock_pipeline.process_url("https://example.com/python")
+
+            assert mock_headless.call_count == 1
+            assert result.file_path == "notes/test.md"
+            assert mock_mirror.call_count == 0
+
+    def test_process_url_headless_mode_falls_back_to_requests(
+        self,
+        sample_app_config: AppConfig,
+        sample_html: str,
+        sample_page_content: PageContent,
+    ) -> None:
+        """headless 模式下出现错误时应回退到 requests。"""
+        sample_app_config.http.fetch_mode = "headless"
+
+        with (
+            patch("websum_to_git.pipeline.LLMClient"),
+            patch("websum_to_git.pipeline.GitHubPublisher") as mock_publisher_cls,
+            patch("websum_to_git.pipeline.fetch_html") as mock_fetch,
+            patch("websum_to_git.pipeline.fetch_html_headless") as mock_headless,
+            patch("websum_to_git.pipeline.fetch_html_via_mirror") as mock_mirror,
+            patch("websum_to_git.pipeline.parse_page") as mock_parse,
+        ):
+            mock_publisher = MagicMock()
+            mock_publisher.publish_markdown.return_value = PublishResult(
+                file_path="notes/test.md",
+                commit_hash="abc123",
+            )
+            mock_publisher_cls.return_value = mock_publisher
+
+            mock_headless.side_effect = RuntimeError("blocked")
+            mock_fetch.return_value = (sample_html, "https://example.com/python")
+            mock_mirror.return_value = (sample_html, "https://mirror.example.com/python")
+            mock_parse.return_value = sample_page_content
+
+            pipeline = HtmlToObsidianPipeline(sample_app_config)
+            pipeline._llm = MagicMock()
+            pipeline._fast_llm = pipeline._llm
+            pipeline._publisher = mock_publisher
+
+            result = pipeline.process_url("https://example.com/python")
+
+            assert mock_fetch.call_count == 1
+            assert mock_mirror.call_count == 0
+            assert result.file_path == "notes/test.md"
+
+    def test_process_url_uses_mirror_fallback(
+        self,
+        mock_pipeline: HtmlToObsidianPipeline,
+        sample_html: str,
+        sample_page_content: PageContent,
+    ) -> None:
+        """requests/headless 均失败时应启用镜像兜底。"""
+        with (
+            patch("websum_to_git.pipeline.fetch_html") as mock_fetch,
+            patch("websum_to_git.pipeline.fetch_html_headless") as mock_headless,
+            patch("websum_to_git.pipeline.fetch_html_via_mirror") as mock_mirror,
+            patch("websum_to_git.pipeline.parse_page") as mock_parse,
+        ):
+            mock_fetch.side_effect = requests.HTTPError("403 Forbidden")
+            mock_headless.side_effect = RuntimeError("blocked")
+            mock_mirror.return_value = (sample_html, "https://mirror.example.com/python")
+            mock_parse.return_value = sample_page_content
+
+            result = mock_pipeline.process_url("https://example.com/python")
+
+            assert mock_mirror.call_count == 1
+            assert result.file_path == "notes/test.md"
+
+    def test_process_url_all_fetch_modes_fail(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
+        """所有抓取方式均失败时应抛出异常，不提交到 GitHub。"""
+        with (
+            patch("websum_to_git.pipeline.fetch_html") as mock_fetch,
+            patch("websum_to_git.pipeline.fetch_html_headless") as mock_headless,
+            patch("websum_to_git.pipeline.fetch_html_via_mirror") as mock_mirror,
+        ):
+            mock_fetch.side_effect = requests.HTTPError("403 Forbidden")
+            mock_headless.side_effect = RuntimeError("headless error")
+            mock_mirror.side_effect = requests.HTTPError("mirror error")
+
+            with pytest.raises(RuntimeError):
+                mock_pipeline.process_url("https://example.com/python")
+
+            _get_publisher_mock(mock_pipeline).publish_markdown.assert_not_called()
+
     # --------------------------------------------------------
     # _summarize_page 测试
     # --------------------------------------------------------
@@ -252,9 +350,7 @@ class TestHtmlToObsidianPipeline:
         # 验证只调用了一次 LLM
         assert _get_llm_mock(mock_pipeline).generate.call_count == 1
 
-    def test_summarize_empty_markdown(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_summarize_empty_markdown(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """空内容应返回默认提示。"""
         page = PageContent(
             url="https://example.com",
@@ -271,9 +367,7 @@ class TestHtmlToObsidianPipeline:
         assert result.ai_title == "Empty Page"
         assert "未提取到" in result.content
 
-    def test_summarize_long_text_chunked(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_summarize_long_text_chunked(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """长文本应分块总结。"""
         # 创建超长内容
         long_markdown = "# 长文章\n\n" + ("这是很长的内容。" * 5000)
@@ -323,9 +417,7 @@ class TestHtmlToObsidianPipeline:
 
         assert len(tags) <= 10
 
-    def test_generate_tags_empty_lines_filtered(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_generate_tags_empty_lines_filtered(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """空行应被过滤。"""
         _get_fast_llm_mock(mock_pipeline).generate.return_value = "Tag1\n\n\nTag2\n  \nTag3"
 
@@ -337,35 +429,30 @@ class TestHtmlToObsidianPipeline:
     # _is_chinese_text 测试
     # --------------------------------------------------------
 
-    def test_is_chinese_text_chinese(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_is_chinese_text_chinese(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """中文文本应返回 True。"""
         assert mock_pipeline._is_chinese_text("这是一段中文文本，包含一些内容。")
 
-    def test_is_chinese_text_english(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_is_chinese_text_english(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """英文文本应返回 False。"""
         assert not mock_pipeline._is_chinese_text("This is an English text with no Chinese.")
 
-    def test_is_chinese_text_mixed_mostly_chinese(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_is_chinese_text_mixed_mostly_chinese(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """中英混合但中文为主应返回 True。"""
         text = "这是一段中文文本，包含少量 English 单词。"
         assert mock_pipeline._is_chinese_text(text)
 
-    def test_is_chinese_text_mixed_mostly_english(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_is_chinese_text_mixed_mostly_english(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """中英混合但英文为主应返回 False。"""
         text = "This is mostly English text with just a few 中文 characters."
         assert not mock_pipeline._is_chinese_text(text)
 
-    def test_is_chinese_text_empty(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_is_chinese_text_many_chinese_chars_threshold(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
+        """中文字符数超过阈值时即使比例较低也视为中文。"""
+        text = "这" * 46 + "a" * 200  # 中文字符数>45，但整体仍以英文字符为主
+        assert mock_pipeline._is_chinese_text(text)
+
+    def test_is_chinese_text_empty(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """空文本或纯符号默认为中文。"""
         assert mock_pipeline._is_chinese_text("")
         assert mock_pipeline._is_chinese_text("123 !@# $%^")
@@ -374,9 +461,7 @@ class TestHtmlToObsidianPipeline:
     # _translate_to_chinese 测试
     # --------------------------------------------------------
 
-    def test_translate_to_chinese(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_translate_to_chinese(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """应调用 LLM 进行翻译。"""
         fast_llm = _get_fast_llm_mock(mock_pipeline)
         fast_llm.generate.return_value = "这是翻译后的中文内容"
@@ -386,9 +471,7 @@ class TestHtmlToObsidianPipeline:
         assert result == "这是翻译后的中文内容"
         fast_llm.generate.assert_called()
 
-    def test_translate_long_text_chunked(
-        self, mock_pipeline: HtmlToObsidianPipeline
-    ) -> None:
+    def test_translate_long_text_chunked(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """长文本翻译应分块处理。"""
         long_text = "This is long content. " * 5000
 
@@ -443,9 +526,7 @@ class TestHtmlToObsidianPipeline:
             "翻译后的中文内容",  # 翻译
         ]
 
-        result = mock_pipeline._build_markdown(
-            page=sample_english_page_content, summary_result=summary
-        )
+        result = mock_pipeline._build_markdown(page=sample_english_page_content, summary_result=summary)
 
         # 应包含翻译版本
         assert "## 原文（中文翻译）" in result

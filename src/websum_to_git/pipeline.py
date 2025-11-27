@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 from .config import AppConfig
@@ -26,6 +26,7 @@ def _load_prompt(name: str) -> str:
 @dataclass
 class SummaryResult:
     """LLM 总结结果，包含精炼标题和正文内容。"""
+
     ai_title: str
     content: str
 
@@ -139,6 +140,9 @@ class HtmlToObsidianPipeline:
         chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
         # 统计总字符数（排除空白和标点）
         total_chars = len(re.findall(r"[a-zA-Z\u4e00-\u9fff]", text))
+        # 如果中文字符绝对数量超过 45，则认为是中文（避免少量英文混入时误判为需翻译）
+        if chinese_chars > 45:
+            return True
         if total_chars == 0:
             return True  # 没有字母或中文时，默认认为是中文
         # 如果中文字符占比超过 30%，则认为是中文
@@ -166,7 +170,7 @@ class HtmlToObsidianPipeline:
         return "\n\n".join(translated_parts)
 
     def _build_markdown(self, *, page: PageContent, summary_result: SummaryResult) -> str:
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now().strftime("%Y.%m.%d. %H:%M")
 
         # 生成标签
         tags = self._generate_tags(summary_result.ai_title, summary_result.content)
