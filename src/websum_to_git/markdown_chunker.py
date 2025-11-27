@@ -45,9 +45,7 @@ def _split_into_paragraphs(text: str) -> list[ParagraphBlock]:
         paragraph_text = "\n".join(current)
         if current_kind != "code":
             paragraph_text = paragraph_text.strip("\n")
-        paragraphs.append(
-            ParagraphBlock(text=paragraph_text, kind=current_kind, fence=current_fence)
-        )
+        paragraphs.append(ParagraphBlock(text=paragraph_text, kind=current_kind, fence=current_fence))
         current = []
         current_kind = "text"
         current_fence = None
@@ -152,9 +150,7 @@ def _build_chunks(paragraphs: list[ParagraphBlock], max_tokens: int) -> list[str
     return chunks
 
 
-def _split_plain_text_chunks(
-    text: str, max_len: int, *, preserve_whitespace: bool = False
-) -> list[str]:
+def _split_plain_text_chunks(text: str, max_len: int, *, preserve_whitespace: bool = False) -> list[str]:
     if max_len <= 0:
         return [text]
 
@@ -284,9 +280,7 @@ def estimate_token_length(text: str) -> int:
     return len(encoder.encode(text, disallowed_special=()))
 
 
-def _hard_split_by_tokens(
-    text: str, max_len: int, *, preserve_whitespace: bool = False
-) -> list[str]:
+def _hard_split_by_tokens(text: str, max_len: int, *, preserve_whitespace: bool = False) -> list[str]:
     if max_len <= 0:
         return [text]
 
@@ -341,4 +335,3 @@ def _detect_code_fence_marker(line: str) -> str | None:
 
 def _is_code_fence_line(line: str) -> bool:
     return bool(_detect_code_fence_marker(line.strip()))
-

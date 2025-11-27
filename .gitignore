@@ -230,3 +230,4 @@ config.yaml
 openspec
 .claude
 /.claude
+.uv-cache

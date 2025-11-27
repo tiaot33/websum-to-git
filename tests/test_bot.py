@@ -158,9 +158,7 @@ class TestTelegramBotApp:
         mock_telegram_update.message.reply_text.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_handle_message_no_message(
-        self, bot_app: TelegramBotApp, mock_telegram_context: MagicMock
-    ) -> None:
+    async def test_handle_message_no_message(self, bot_app: TelegramBotApp, mock_telegram_context: MagicMock) -> None:
         """无消息对象时应被忽略。"""
         update = MagicMock()
         update.message = None
