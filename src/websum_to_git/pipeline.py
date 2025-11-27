@@ -67,7 +67,7 @@ class HtmlToObsidianPipeline:
         return self._publisher.publish_markdown(
             content=full_markdown,
             source=page.final_url,
-            title=page.title,
+            title=summary_result.ai_title,
         )
 
     def _summarize_page(self, page: PageContent) -> SummaryResult:
