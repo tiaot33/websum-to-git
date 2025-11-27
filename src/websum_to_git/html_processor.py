@@ -85,7 +85,7 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+            browser = p.chromium.launch(headless=False, args=["--disable-blink-features=AutomationControlled"])
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
                 user_agent=DEFAULT_HEADERS["User-Agent"],
@@ -110,8 +110,44 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
                 response = page.goto(
                     url,
                     timeout=max(timeout, 1) * 1000,
-                    wait_until="networkidle",
+                    wait_until="domcontentloaded",
                 )
+                # 继续等待页面完成主要资源加载，给懒加载内容留出时间
+                try:  # noqa: SIM105
+                    page.wait_for_load_state("load")
+                except PlaywrightTimeoutError:
+                    pass
+                try:  # noqa: SIM105
+                    page.wait_for_load_state("networkidle", timeout=8000)
+                except PlaywrightTimeoutError:
+                    pass
+                page.wait_for_timeout(3000)
+                # 缓慢滚动至页面底部，触发懒加载图片/内容
+                page.evaluate(
+                    """
+(() => {
+    return new Promise((resolve) => {
+        const scrollingElement = document.scrollingElement || document.documentElement;
+        const viewport = window.innerHeight || document.documentElement.clientHeight || 800;
+        const step = Math.max(Math.floor(viewport * 0.75), 300);
+        const delay = 250;
+
+        const scroll = () => {
+            const { scrollTop, scrollHeight, clientHeight } = scrollingElement;
+            if (scrollTop + clientHeight >= scrollHeight) {
+                resolve();
+                return;
+            }
+            window.scrollBy(0, step);
+            setTimeout(scroll, delay);
+        };
+
+        scroll();
+    });
+})()
+"""
+                )
+                page.wait_for_timeout(5000)
                 if response and response.status >= 400:
                     status_text = getattr(response, "status_text", "") or ""
                     raise HeadlessFetchError(f"Headless 抓取失败: HTTP {response.status} {status_text}".strip())
