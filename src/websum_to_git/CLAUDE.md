@@ -118,7 +118,7 @@ print(config.llm.provider)  # "openai"
 - `process_url(url) -> PublishResult`: 主入口，处理 URL 并发布到 GitHub
 
 **核心常量**:
-- `_MAX_SUMMARY_INPUT_CHARS = 10_000`: 单次 LLM 请求最大输入字符数
+- `_MAX_INPUT_TOKENS = 4000`: 单次 LLM 请求最大输入 token 数
 - `_PROMPTS_DIR`: 提示词文件目录路径
 
 **内部方法**:
@@ -127,8 +127,11 @@ print(config.llm.provider)  # "openai"
 - `_summarize_page(page: PageContent) -> SummaryResult`:
   - 短文本 (≤10K字符): 一次性使用 `final_summary.md` 总结
   - 长文本: 每个 chunk 独立使用 `final_summary.md` 生成完整总结，然后拼接
+- `_generate_tags(title, summary_content) -> list[str]`: 调用 AI 生成 3-5 个标签
+- `_is_chinese_text(text) -> bool`: 检测文本是否主要为中文
+- `_translate_to_chinese(text) -> str`: 将非中文文本翻译为中文
 - `_build_markdown(page, summary_result) -> str`:
-  - 生成 YAML front matter + AI 总结正文 + 页面原文
+  - 生成 YAML front matter（含 tags）+ AI 总结 + 原文（非中文时附带翻译）
 
 **输出格式**:
 ```markdown
@@ -136,6 +139,10 @@ print(config.llm.provider)  # "openai"
 source: https://example.com/article
 created_at: 2025-11-26T10:00:00+00:00
 title: 文章标题
+tags:
+  - ClaudeCode
+  - Python
+  - FastAPI
 ---
 
 # AI精炼标题
@@ -151,8 +158,17 @@ title: 文章标题
 ---
 
 ## 原文
+（中文原文直接输出）
 
-（页面原始 Markdown 内容）
+---
+（或非中文原文时）
+## 原文（中文翻译）
+（AI 翻译的中文版本）
+
+---
+
+## 原文（原语言）
+（保留的原语言内容）
 ```
 
 **依赖**: `html_processor`, `llm_client`, `github_client`, `markdown_chunker`
@@ -207,6 +223,7 @@ class PageContent:
 | 符号 | 类型 | 说明 |
 |------|------|------|
 | `split_markdown_into_chunks(text, max_tokens)` | function | 主分割函数 |
+| `estimate_token_length(text)` | function | 估算文本 token 长度 |
 | `ParagraphBlock` | dataclass | 段落块数据结构 |
 | `ParagraphKind` | Literal | 段落类型枚举 |
 

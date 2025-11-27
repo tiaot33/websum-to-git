@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,10 +9,10 @@ from .config import AppConfig
 from .github_client import GitHubPublisher, PublishResult
 from .html_processor import PageContent, fetch_html, fetch_html_headless, parse_page
 from .llm_client import LLMClient
-from .markdown_chunker import split_markdown_into_chunks
+from .markdown_chunker import estimate_token_length, split_markdown_into_chunks
 
-# 近似控制每次请求的输入规模（按字符近似 token，主要面向中文场景）
-_MAX_SUMMARY_INPUT_CHARS = 10_000
+# 单次 LLM 请求最大输入 token 数
+_MAX_INPUT_TOKENS = 10000
 
 # 提示词文件路径
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -74,7 +75,7 @@ class HtmlToObsidianPipeline:
             return SummaryResult(ai_title=page.title, content="（页面中未提取到正文内容）")
 
         # 内容较短时，直接一次性总结
-        if len(text) <= _MAX_SUMMARY_INPUT_CHARS:
+        if estimate_token_length(text) <= _MAX_INPUT_TOKENS:
             user_content = (
                 f"网页标题: {page.title}\n网页地址: {page.final_url}\n\n网页正文内容（已去除脚本等噪音标签）:\n{text}\n"
             )
@@ -85,7 +86,7 @@ class HtmlToObsidianPipeline:
             return _parse_summary_result(raw_output)
 
         # 内容较长时，按 Markdown 块结构分 chunk，每个 chunk 独立生成完整总结后拼接
-        chunks = split_markdown_into_chunks(text, _MAX_SUMMARY_INPUT_CHARS)
+        chunks = split_markdown_into_chunks(text, _MAX_INPUT_TOKENS)
 
         chunk_results: list[SummaryResult] = []
         total = len(chunks)
@@ -120,17 +121,67 @@ class HtmlToObsidianPipeline:
         merged_content = "\n\n---\n\n".join(merged_content_parts)
         return SummaryResult(ai_title=ai_title, content=merged_content)
 
+    def _generate_tags(self, title: str, summary_content: str) -> list[str]:
+        """调用 AI 生成文章标签。"""
+        user_content = f"文章标题: {title}\n\n文章摘要:\n{summary_content[:2000]}\n"
+        raw_output = self._llm.generate(
+            system_prompt=_load_prompt("generate_tags"),
+            user_content=user_content,
+        ).strip()
+        # 解析输出为标签列表，每行一个标签
+        tags = [line.strip() for line in raw_output.split("\n") if line.strip()]
+        return tags[:10]  # 最多返回 10 个标签
+
+    def _is_chinese_text(self, text: str) -> bool:
+        """检测文本是否主要为中文。"""
+        # 统计中文字符数量
+        chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
+        # 统计总字符数（排除空白和标点）
+        total_chars = len(re.findall(r"[a-zA-Z\u4e00-\u9fff]", text))
+        if total_chars == 0:
+            return True  # 没有字母或中文时，默认认为是中文
+        # 如果中文字符占比超过 30%，则认为是中文
+        return chinese_chars / total_chars > 0.3
+
+    def _translate_to_chinese(self, text: str) -> str:
+        """将文本翻译为中文。"""
+        # 对于超长文本，分块翻译
+        if estimate_token_length(text) <= _MAX_INPUT_TOKENS:
+            return self._llm.generate(
+                system_prompt=_load_prompt("translate_to_chinese"),
+                user_content=text,
+            ).strip()
+
+        # 分块翻译
+        chunks = split_markdown_into_chunks(text, _MAX_INPUT_TOKENS)
+        translated_parts: list[str] = []
+        for chunk in chunks:
+            translated = self._llm.generate(
+                system_prompt=_load_prompt("translate_to_chinese"),
+                user_content=chunk,
+            ).strip()
+            if translated:
+                translated_parts.append(translated)
+        return "\n\n".join(translated_parts)
+
     def _build_markdown(self, *, page: PageContent, summary_result: SummaryResult) -> str:
         now = datetime.now(UTC).isoformat()
+
+        # 生成标签
+        tags = self._generate_tags(summary_result.ai_title, summary_result.content)
+
         # YAML front matter 中保留原始网页标题
         front_matter_lines = [
             "---",
             f"source: {page.final_url}",
             f"created_at: {now}",
             f"title: {page.title}",
-            "---",
-            "",
+            "tags:",
         ]
+        # tags 使用多行列表格式
+        for tag in tags:
+            front_matter_lines.append(f"  - {tag}")
+        front_matter_lines.extend(["---", ""])
 
         # 正文使用 AI 生成的精炼标题
         body_lines: list[str] = []
@@ -140,11 +191,30 @@ class HtmlToObsidianPipeline:
         body_lines.append("")
 
         # 附加页面原文
+        original_markdown = page.markdown.strip()
+        is_chinese = self._is_chinese_text(original_markdown)
+
         body_lines.append("---")
         body_lines.append("")
-        body_lines.append("## 原文")
-        body_lines.append("")
-        body_lines.append(page.markdown.strip())
+
+        if is_chinese:
+            # 原文是中文，直接输出
+            body_lines.append("## 原文")
+            body_lines.append("")
+            body_lines.append(original_markdown)
+        else:
+            # 原文非中文，先输出翻译，再保留原文
+            translated = self._translate_to_chinese(original_markdown)
+            body_lines.append("## 原文（中文翻译）")
+            body_lines.append("")
+            body_lines.append(translated)
+            body_lines.append("")
+            body_lines.append("---")
+            body_lines.append("")
+            body_lines.append("## 原文（原语言）")
+            body_lines.append("")
+            body_lines.append(original_markdown)
+
         body_lines.append("")
 
         return "\n".join(front_matter_lines + body_lines)

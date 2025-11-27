@@ -91,7 +91,7 @@ flowchart TB
 |------|------|------|------|
 | **config** | `src/websum_to_git/config.py` | 配置模型定义与 YAML 加载 | 98 |
 | **bot** | `src/websum_to_git/bot.py` | Telegram Bot 入口与消息处理 | 73 |
-| **pipeline** | `src/websum_to_git/pipeline.py` | HTML→LLM→Markdown→GitHub 核心流程 | 150 |
+| **pipeline** | `src/websum_to_git/pipeline.py` | HTML→LLM→Markdown→GitHub 核心流程 | 219 |
 | **html_processor** | `src/websum_to_git/html_processor.py` | 网页抓取(requests/Playwright)与解析 | 155 |
 | **markdown_chunker** | `src/websum_to_git/markdown_chunker.py` | 基于 tiktoken 的 Markdown 分段 | 343 |
 | **llm_client** | `src/websum_to_git/llm_client.py` | 多厂商 LLM 统一调用接口 | 146 |

@@ -106,7 +106,7 @@ def _build_chunks(paragraphs: list[ParagraphBlock], max_tokens: int) -> list[str
     chunks: list[str] = []
     current: list[str] = []
     current_len = 0
-    separator_tokens = _estimate_token_length("\n\n")
+    separator_tokens = estimate_token_length("\n\n")
 
     def flush_current() -> None:
         nonlocal current, current_len
@@ -121,7 +121,7 @@ def _build_chunks(paragraphs: list[ParagraphBlock], max_tokens: int) -> list[str
         if not content:
             continue
 
-        para_len = _estimate_token_length(content)
+        para_len = estimate_token_length(content)
 
         if para_len >= max_tokens:
             flush_current()
@@ -159,13 +159,13 @@ def _split_plain_text_chunks(
         return [text]
 
     lines = text.splitlines()
-    newline_tokens = _estimate_token_length("\n")
+    newline_tokens = estimate_token_length("\n")
     parts: list[str] = []
     current_lines: list[str] = []
     current_len = 0
 
     for line in lines:
-        line_tokens = _estimate_token_length(line)
+        line_tokens = estimate_token_length(line)
         if not current_lines:
             current_lines.append(line)
             current_len = line_tokens
@@ -191,7 +191,7 @@ def _split_plain_text_chunks(
 
     result: list[str] = []
     for part in parts or [text.rstrip("\n") if preserve_whitespace else text.strip()]:
-        if _estimate_token_length(part) <= max_len:
+        if estimate_token_length(part) <= max_len:
             result.append(part)
         else:
             result.extend(
@@ -233,8 +233,8 @@ def _split_code_body_lines(
     max_len: int,
     fence_marker: str,
 ) -> list[str]:
-    newline_tokens = _estimate_token_length("\n")
-    fence_tokens = _estimate_token_length(start_line) + _estimate_token_length(end_line)
+    newline_tokens = estimate_token_length("\n")
+    fence_tokens = estimate_token_length(start_line) + estimate_token_length(end_line)
     allowed_tokens = max(max_len - fence_tokens, 1)
 
     if not body_lines:
@@ -245,7 +245,7 @@ def _split_code_body_lines(
     current_tokens = fence_tokens
 
     for line in body_lines:
-        line_tokens = _estimate_token_length(line)
+        line_tokens = estimate_token_length(line)
         sep = newline_tokens if current_lines else 0
 
         if current_lines and current_tokens + sep + line_tokens > max_len:
@@ -276,7 +276,8 @@ def _split_code_body_lines(
     return chunks or ["\n".join([fence_marker, fence_marker]).strip()]
 
 
-def _estimate_token_length(text: str) -> int:
+def estimate_token_length(text: str) -> int:
+    """估算文本的 token 长度（使用 tiktoken cl100k_base 编码）。"""
     if not text:
         return 0
     encoder = _get_token_encoder()
