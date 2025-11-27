@@ -67,6 +67,13 @@ llm:
   api_key: "你的 LLM API Key"
   model: "gpt-4.1-mini"
 
+llm_fast:
+  # 可选：用于标签和翻译的快速模型，通常指向更便宜/延迟更低的端口
+  provider: "openai"
+  base_url: "https://fast-llm.example.com"
+  api_key: "你的 Fast LLM API Key"
+  model: "gpt-4o-mini"
+
 github:
   repo: "yourname/your-notes-repo"
   branch: "main"
@@ -80,6 +87,8 @@ http:
   # 抓取模式，可选: requests（默认，使用 requests 抓取）/ headless（Playwright Chromium）
   fetch_mode: "requests"
 ```
+
+其中 `llm` 用于网页摘要生成，`llm_fast`（可选）用于标签与翻译，可指向不同端口/模型以获得更低时延或成本；若未配置 `llm_fast`，系统会退回到 `llm`。
 
 > 提示：请务必不要将包含真实密钥的 `config.yaml` 提交到 GitHub 公共仓库。
 

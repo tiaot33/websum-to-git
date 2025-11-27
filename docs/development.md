@@ -80,7 +80,7 @@ cp config.example.yaml config.yaml
 
 根据需要填入：
 - Telegram Bot Token
-- LLM base_url / api_key / model
+- LLM base_url / api_key / model（`llm` 用于摘要，可另外提供 `llm_fast` 供标签/翻译使用）
 - GitHub repo / branch / target_dir / pat
 
 > 提醒：请不要把包含真实凭证的 `config.yaml` 提交到 Git 仓库。
@@ -112,7 +112,7 @@ logging.basicConfig(level=logging.DEBUG, ...)
 
 #### 选择不同的 LLM Provider
 
-配置文件 `llm` 段支持：
+配置文件 `llm` 段用于网页摘要，`llm_fast` 段（可选）用于标签和翻译，两者字段完全一致：
 
 - `provider: "openai"`（默认）
   - 使用 OpenAI Chat Completions API（`chat.completions.create`）
@@ -131,6 +131,8 @@ logging.basicConfig(level=logging.DEBUG, ...)
 
 - `api_key`: 对应服务的 API Key
 - `model`: 模型名称（如 `gpt-4.1-mini`、`claude-3.5-sonnet`、`gemini-1.5-pro` 等）
+
+`HtmlToObsidianPipeline` 会始终使用 `llm` 生成摘要；若提供了 `llm_fast`，则在生成标签与翻译原文时改用该配置，否则回退到 `llm`。
 
 ### 调整 Markdown 结构
 

@@ -12,6 +12,13 @@ llm:
   api_key: "YOUR_LLM_API_KEY"
   model: "gpt-4.1-mini"
 
+llm_fast:
+  # 用于标签和翻译的快速模型，可单独配置到不同端口/服务
+  provider: "openai"
+  base_url: "https://fast-llm.example.com"
+  api_key: "YOUR_FAST_LLM_API_KEY"
+  model: "gpt-4o-mini"
+
 github:
   repo: "owner/repo"           # 例如: yourname/your-notes-repo
   branch: "main"

@@ -43,6 +43,7 @@ class HtmlToObsidianPipeline:
     def __init__(self, config: AppConfig) -> None:
         self._config = config
         self._llm = LLMClient(config.llm)
+        self._fast_llm = LLMClient(config.fast_llm) if config.fast_llm else self._llm
         self._publisher = GitHubPublisher(config.github)
 
     def process_url(self, url: str) -> PublishResult:
@@ -124,7 +125,7 @@ class HtmlToObsidianPipeline:
     def _generate_tags(self, title: str, summary_content: str) -> list[str]:
         """调用 AI 生成文章标签。"""
         user_content = f"文章标题: {title}\n\n文章摘要:\n{summary_content[:2000]}\n"
-        raw_output = self._llm.generate(
+        raw_output = self._fast_llm.generate(
             system_prompt=_load_prompt("generate_tags"),
             user_content=user_content,
         ).strip()
@@ -147,7 +148,7 @@ class HtmlToObsidianPipeline:
         """将文本翻译为中文。"""
         # 对于超长文本，分块翻译
         if estimate_token_length(text) <= _MAX_INPUT_TOKENS:
-            return self._llm.generate(
+            return self._fast_llm.generate(
                 system_prompt=_load_prompt("translate_to_chinese"),
                 user_content=text,
             ).strip()
@@ -156,7 +157,7 @@ class HtmlToObsidianPipeline:
         chunks = split_markdown_into_chunks(text, _MAX_INPUT_TOKENS)
         translated_parts: list[str] = []
         for chunk in chunks:
-            translated = self._llm.generate(
+            translated = self._fast_llm.generate(
                 system_prompt=_load_prompt("translate_to_chinese"),
                 user_content=chunk,
             ).strip()

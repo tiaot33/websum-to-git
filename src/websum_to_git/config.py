@@ -40,12 +40,31 @@ class AppConfig:
     llm: LLMConfig
     github: GitHubConfig
     http: HttpConfig
+    fast_llm: LLMConfig | None = None
 
 
 def _require(mapping: dict[str, Any], key: str) -> Any:
     if key not in mapping or mapping[key] in ("", None):
         raise ValueError(f"配置缺少必填字段: {key}")
     return mapping[key]
+
+
+def _build_llm_config(llm_raw: dict[str, Any]) -> LLMConfig:
+    provider = (llm_raw.get("provider") or "openai").lower()
+    api_key = _require(llm_raw, "api_key")
+    model = _require(llm_raw, "model")
+    base_url = llm_raw.get("base_url")
+
+    if provider in ("openai", "openai-response"):
+        # 对于 OpenAI/兼容服务，如果未指定 base_url，则使用官方默认地址
+        base_url = base_url or "https://api.openai.com"
+
+    return LLMConfig(
+        provider=provider,
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+    )
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -58,26 +77,14 @@ def load_config(path: str | Path) -> AppConfig:
 
     telegram_raw = raw.get("telegram", {})
     llm_raw = raw.get("llm", {})
+    llm_fast_raw = raw.get("llm_fast")
     github_raw = raw.get("github", {})
     http_raw = raw.get("http", {}) or {}
 
     telegram = TelegramConfig(bot_token=_require(telegram_raw, "bot_token"))
 
-    provider = (llm_raw.get("provider") or "openai").lower()
-    api_key = _require(llm_raw, "api_key")
-    model = _require(llm_raw, "model")
-    base_url = llm_raw.get("base_url")
-
-    if provider in ("openai", "openai-response"):
-        # 对于 OpenAI/兼容服务，如果未指定 base_url，则使用官方默认地址
-        base_url = base_url or "https://api.openai.com"
-
-    llm = LLMConfig(
-        provider=provider,
-        api_key=api_key,
-        model=model,
-        base_url=base_url,
-    )
+    llm = _build_llm_config(llm_raw)
+    fast_llm = _build_llm_config(llm_fast_raw) if llm_fast_raw else None
 
     github = GitHubConfig(
         repo=_require(github_raw, "repo"),
@@ -95,4 +102,4 @@ def load_config(path: str | Path) -> AppConfig:
         fetch_mode=fetch_mode,
     )
 
-    return AppConfig(telegram=telegram, llm=llm, github=github, http=http)
+    return AppConfig(telegram=telegram, llm=llm, github=github, http=http, fast_llm=fast_llm)

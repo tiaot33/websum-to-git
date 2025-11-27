@@ -33,6 +33,11 @@ def _get_llm_mock(pipeline: HtmlToObsidianPipeline) -> MagicMock:
     return cast(MagicMock, pipeline._llm)
 
 
+def _get_fast_llm_mock(pipeline: HtmlToObsidianPipeline) -> MagicMock:
+    """返回绑定到 Pipeline 的 fast LLM MagicMock。"""
+    return cast(MagicMock, pipeline._fast_llm)
+
+
 def _get_publisher_mock(pipeline: HtmlToObsidianPipeline) -> MagicMock:
     """返回绑定到 Pipeline 的 GitHubPublisher MagicMock。"""
     return cast(MagicMock, pipeline._publisher)
@@ -150,6 +155,7 @@ class TestHtmlToObsidianPipeline:
 
             pipeline = HtmlToObsidianPipeline(sample_app_config)
             pipeline._llm = mock_llm
+            pipeline._fast_llm = mock_llm
             pipeline._publisher = mock_publisher
 
             return pipeline
@@ -177,10 +183,12 @@ class TestHtmlToObsidianPipeline:
                 )
 
                 # 模拟 LLM 返回
-                _get_llm_mock(mock_pipeline).generate.side_effect = [
-                    "Python 入门指南\n\n> Python 是现代编程的基础...\n\n## 核心概念",  # 总结
-                    "Python\nProgramming\nTutorial",  # 标签
-                ]
+                _get_llm_mock(mock_pipeline).generate.return_value = (
+                    "Python 入门指南\n\n> Python 是现代编程的基础...\n\n## 核心概念"
+                )
+                _get_fast_llm_mock(mock_pipeline).generate.return_value = (
+                    "Python\nProgramming\nTutorial"
+                )
 
                 result = mock_pipeline.process_url("https://example.com/python")
 
@@ -299,7 +307,7 @@ class TestHtmlToObsidianPipeline:
 
     def test_generate_tags(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """应正确生成标签列表。"""
-        _get_llm_mock(mock_pipeline).generate.return_value = "Python\nProgramming\nTutorial"
+        _get_fast_llm_mock(mock_pipeline).generate.return_value = "Python\nProgramming\nTutorial"
 
         tags = mock_pipeline._generate_tags("Python 入门", "Python 编程教程...")
 
@@ -309,7 +317,7 @@ class TestHtmlToObsidianPipeline:
 
     def test_generate_tags_max_10(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
         """标签最多返回 10 个。"""
-        _get_llm_mock(mock_pipeline).generate.return_value = "\n".join([f"Tag{i}" for i in range(20)])
+        _get_fast_llm_mock(mock_pipeline).generate.return_value = "\n".join([f"Tag{i}" for i in range(20)])
 
         tags = mock_pipeline._generate_tags("Title", "Content...")
 
@@ -319,7 +327,7 @@ class TestHtmlToObsidianPipeline:
         self, mock_pipeline: HtmlToObsidianPipeline
     ) -> None:
         """空行应被过滤。"""
-        _get_llm_mock(mock_pipeline).generate.return_value = "Tag1\n\n\nTag2\n  \nTag3"
+        _get_fast_llm_mock(mock_pipeline).generate.return_value = "Tag1\n\n\nTag2\n  \nTag3"
 
         tags = mock_pipeline._generate_tags("Title", "Content...")
 
@@ -370,12 +378,13 @@ class TestHtmlToObsidianPipeline:
         self, mock_pipeline: HtmlToObsidianPipeline
     ) -> None:
         """应调用 LLM 进行翻译。"""
-        _get_llm_mock(mock_pipeline).generate.return_value = "这是翻译后的中文内容"
+        fast_llm = _get_fast_llm_mock(mock_pipeline)
+        fast_llm.generate.return_value = "这是翻译后的中文内容"
 
         result = mock_pipeline._translate_to_chinese("This is English content")
 
         assert result == "这是翻译后的中文内容"
-        _get_llm_mock(mock_pipeline).generate.assert_called()
+        fast_llm.generate.assert_called()
 
     def test_translate_long_text_chunked(
         self, mock_pipeline: HtmlToObsidianPipeline
@@ -383,7 +392,7 @@ class TestHtmlToObsidianPipeline:
         """长文本翻译应分块处理。"""
         long_text = "This is long content. " * 5000
 
-        _get_llm_mock(mock_pipeline).generate.side_effect = [
+        _get_fast_llm_mock(mock_pipeline).generate.side_effect = [
             "第一部分翻译",
             "第二部分翻译",
         ] * 10
@@ -404,7 +413,7 @@ class TestHtmlToObsidianPipeline:
         summary = SummaryResult(ai_title="精炼标题", content="摘要内容...")
 
         # Mock 标签生成
-        _get_llm_mock(mock_pipeline).generate.return_value = "Python\nTutorial"
+        _get_fast_llm_mock(mock_pipeline).generate.return_value = "Python\nTutorial"
 
         result = mock_pipeline._build_markdown(page=sample_page_content, summary_result=summary)
 
@@ -427,8 +436,9 @@ class TestHtmlToObsidianPipeline:
         """英文内容构建 Markdown（需翻译）。"""
         summary = SummaryResult(ai_title="Refined Title", content="Summary...")
 
-        # Mock ���签���成和翻译
-        _get_llm_mock(mock_pipeline).generate.side_effect = [
+        # Mock 标签生成和翻译
+        fast_mock = _get_fast_llm_mock(mock_pipeline)
+        fast_mock.generate.side_effect = [
             "Python\nTutorial",  # 标签
             "翻译后的中文内容",  # 翻译
         ]
@@ -447,7 +457,7 @@ class TestHtmlToObsidianPipeline:
     ) -> None:
         """YAML front matter 格式正确。"""
         summary = SummaryResult(ai_title="标题", content="内容")
-        _get_llm_mock(mock_pipeline).generate.return_value = "Tag1\nTag2"
+        _get_fast_llm_mock(mock_pipeline).generate.return_value = "Tag1\nTag2"
 
         result = mock_pipeline._build_markdown(page=sample_page_content, summary_result=summary)
 
