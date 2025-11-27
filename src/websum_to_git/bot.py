@@ -33,6 +33,8 @@ class TelegramBotApp:
         self._pipeline = HtmlToObsidianPipeline(config)
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not update.message:
+            return
         await update.message.reply_text("请发送包含 HTML 网页地址的消息，我会帮你摘要并同步到 GitHub。")
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

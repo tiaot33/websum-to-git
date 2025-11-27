@@ -4,35 +4,64 @@ from typing import Any
 
 from .config import LLMConfig
 
+OpenAI: Any | None = None
+anthropic: Any | None = None
+genai: Any | None = None
+
+
+def _ensure_openai_client() -> Any:
+    global OpenAI
+    if OpenAI is None:
+        from openai import OpenAI as _OpenAI
+
+        OpenAI = _OpenAI
+    return OpenAI
+
+
+def _ensure_anthropic_module() -> Any:
+    global anthropic
+    if anthropic is None:
+        import anthropic as _anthropic
+
+        anthropic = _anthropic
+    return anthropic
+
+
+def _ensure_gemini_module() -> Any:
+    global genai
+    if genai is None:
+        import google.generativeai as _genai
+
+        genai = _genai
+    return genai
+
 
 class LLMClient:
     def __init__(self, config: LLMConfig) -> None:
         self._config = config
         provider = (config.provider or "openai").lower()
         self._provider = provider
+        self._client: Any
 
         # 延迟导入对应 SDK，避免不必要依赖
         if provider in ("openai", "openai-response"):
-            from openai import OpenAI
-
-            self._client = OpenAI(api_key=config.api_key, base_url=config.base_url)
+            openai_cls = _ensure_openai_client()
+            self._client = openai_cls(api_key=config.api_key, base_url=config.base_url)
         elif provider == "anthropic":
-            import anthropic
-
+            anthropic_module = _ensure_anthropic_module()
             client_kwargs: dict[str, Any] = {"api_key": config.api_key}
             if config.base_url:
                 client_kwargs["base_url"] = config.base_url
-            self._client = anthropic.Anthropic(**client_kwargs)
+            self._client = anthropic_module.Anthropic(**client_kwargs)
         elif provider == "gemini":
-            import google.generativeai as genai
-
+            genai_module = _ensure_gemini_module()
             client_kwargs: dict[str, Any] = {"api_key": config.api_key}
             if config.base_url:
                 # 部分 Gemini 兼容服务通过自定义 api_endpoint 暴露
                 client_kwargs["client_options"] = {"api_endpoint": config.base_url}
-            genai.configure(**client_kwargs)
+            genai_module.configure(**client_kwargs)
             # 对于 Gemini，我们直接在构造阶段创建模型实例
-            self._client = genai.GenerativeModel(config.model)
+            self._client = genai_module.GenerativeModel(config.model)
         else:
             raise ValueError(f"不支持的 LLM provider: {config.provider}")
 
@@ -89,7 +118,7 @@ class LLMClient:
                 if text:
                     parts.append(text)
 
-            text = "".join(parts).strip()
+        text = "".join(parts).strip()
         if not text:
             # 兜底：有些兼容服务可能直接返回 text 字段
             direct_text = getattr(resp, "text", None)
