@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -116,6 +117,36 @@ def _html_to_markdown(html: str) -> str:
     ).strip()
 
 
+def _make_links_absolute(html: str, base_url: str) -> str:
+    """将 HTML 中的相对链接转换为绝对链接。
+
+    处理 <a href> 和 <img src> 等属性中的相对 URL。
+
+    Args:
+        html: 需要处理的 HTML 内容
+        base_url: 用于解析相对链接的基础 URL
+
+    Returns:
+        处理后的 HTML，所有相对链接已转换为绝对链接
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    # 处理 <a> 标签的 href 属性
+    for tag in soup.find_all("a", href=True):
+        href = str(tag["href"])
+        if href and not urlparse(href).scheme:
+            # 相对链接，转换为绝对链接
+            tag["href"] = urljoin(base_url, href)
+
+    # 处理 <img> 标签的 src 属性
+    for tag in soup.find_all("img", src=True):
+        src = str(tag["src"])
+        if src and not urlparse(src).scheme:
+            tag["src"] = urljoin(base_url, src)
+
+    return str(soup)
+
+
 def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent:
     """解析 HTML 页面，使用 Readability 提取正文并转换为 Markdown。
 
@@ -133,6 +164,8 @@ def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent
     doc = Document(html)
     title = doc.title() or ""
     article_html = doc.summary()
+    # 将相对链接转换为绝对链接，确保 Markdown 中的链接可正确访问
+    article_html = _make_links_absolute(article_html, final_url)
     # 转换为 Markdown
     markdown = _html_to_markdown(article_html)
 
