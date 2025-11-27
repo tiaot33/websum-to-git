@@ -30,9 +30,24 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "mypy>=1.18.2",
+    "pyright>=1.1.407",
     "ruff>=0.14.6",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-mock>=3.14.0",
+    "pytest-cov>=6.0.0",
+    "responses>=0.25.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-v --tb=short"
+markers = [
+    "functional: 需要外部服务（Telegram/LLM/GitHub 等）的真实功能测试",
+]
+
 [tool.ruff]
 # Set the maximum line length to 120.
 line-length = 120
