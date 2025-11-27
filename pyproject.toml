@@ -18,7 +18,8 @@ dependencies = [
     "playwright",
     "readability-lxml",
     "markdownify",
-    "tiktoken"
+    "tiktoken",
+    "playwright-stealth<2.0.0",
 ]
 
 [project.scripts]

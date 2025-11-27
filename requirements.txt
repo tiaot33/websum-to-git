@@ -6,6 +6,7 @@ openai
 anthropic
 google-generativeai
 playwright
+playwright-stealth
 readability-lxml
 markdownify
 tiktoken

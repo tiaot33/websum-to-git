@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -18,6 +18,10 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     "Connection": "keep-alive",
+}
+
+_HEADLESS_EXTRA_HEADERS = {
+    key: value for key, value in DEFAULT_HEADERS.items() if key.lower() not in {"user-agent", "connection"}
 }
 
 
@@ -81,16 +85,36 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context()
+            browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+            context = browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent=DEFAULT_HEADERS["User-Agent"],
+                locale="zh-CN",
+                timezone_id="Asia/Shanghai",
+                permissions=["geolocation"],
+                extra_http_headers=_HEADLESS_EXTRA_HEADERS,
+            )
+            context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+            try:
+                from playwright_stealth import (  # type: ignore import-not-found
+                    stealth_sync,
+                )
+            except ModuleNotFoundError:
+                stealth_sync = None  # type: ignore[assignment]
+
             page = context.new_page()
+            if stealth_sync is not None:
+                stealth_sync(page)
 
             try:
-                page.goto(
+                response = page.goto(
                     url,
                     timeout=max(timeout, 1) * 1000,
                     wait_until="networkidle",
                 )
+                if response and response.status >= 400:
+                    status_text = getattr(response, "status_text", "") or ""
+                    raise HeadlessFetchError(f"Headless 抓取失败: HTTP {response.status} {status_text}".strip())
                 html = page.content()
                 final_url = page.url
             finally:
@@ -102,6 +126,21 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
         raise HeadlessFetchError(f"Headless 抓取失败: {url}") from exc
 
     return html, final_url
+
+
+def fetch_html_via_mirror(url: str, timeout: int = 15) -> tuple[str, str]:
+    """通过公开镜像服务获取 HTML，用于应对被封禁/403 的站点。"""
+
+    encoded_url = quote(url, safe=":/?&=#%")
+    mirror_url = f"https://r.jina.ai/{encoded_url}"
+    resp = requests.get(
+        mirror_url,
+        timeout=timeout,
+        headers=DEFAULT_HEADERS,
+    )
+    resp.raise_for_status()
+    return resp.text, url
+
 
 def _html_to_markdown(html: str) -> str:
     """将 HTML 转换为 Markdown 格式。
