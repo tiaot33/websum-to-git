@@ -6,7 +6,7 @@ openai
 anthropic
 google-genai
 playwright
-playwright-stealth
+playwright-stealth<2.0.0
 readability-lxml
 markdownify
 tiktoken
