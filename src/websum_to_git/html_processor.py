@@ -85,6 +85,7 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
 
     try:
         with sync_playwright() as p:
+            # 默认使用有头浏览器，配合 Docker 中的 Xvfb 或宿主机 X Server 使用
             browser = p.chromium.launch(headless=False, args=["--disable-blink-features=AutomationControlled"])
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
