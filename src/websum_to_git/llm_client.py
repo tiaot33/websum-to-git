@@ -27,7 +27,6 @@ class LLMClient:
             self._client = anthropic.Anthropic(**client_kwargs)
         elif provider == "gemini":
             client = genai.Client(api_key=config.api_key, http_options=types.HttpOptions(base_url=config.base_url))
-            # 对于 Gemini，我们直接在构造阶段创建模型实例
             self._client = client
         else:
             raise ValueError(f"不支持的 LLM provider: {config.provider}")
@@ -60,7 +59,7 @@ class LLMClient:
         resp = self._client.chat.completions.create(
             model=self._config.model,
             messages=messages,
-            temperature=0.2,
+            temperature=1.0,
         )
         return resp.choices[0].message.content or ""
 
@@ -75,7 +74,7 @@ class LLMClient:
         resp = self._client.responses.create(
             model=self._config.model,
             input=input_segments,
-            temperature=0.2,
+            temperature=1.0,
         )
 
         parts: list[str] = []
@@ -98,8 +97,7 @@ class LLMClient:
         # Anthropic 原生 SDK，使用 messages API
         kwargs: dict[str, Any] = {
             "model": self._config.model,
-            "max_tokens": 4096,
-            "temperature": 0.2,
+            "temperature": 1.0,
             "messages": [{"role": "user", "content": user_content}],
         }
         if system_prompt:
