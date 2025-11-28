@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 import requests
 
@@ -32,7 +32,7 @@ class GitHubPublisher:
         if not self._config.repo or not self._config.pat:
             raise ValueError("GitHub 配置缺失 repo 或 pat")
 
-        now = datetime.now(UTC)
+        now = datetime.now()
         timestamp_str = now.strftime("%Y%m%d-%H%M%S")
         safe_title = "".join(c if c.isalnum() or c in "-_" else "-" for c in title)[:60] or "note"
         filename = f"{timestamp_str}-{safe_title}.md"
