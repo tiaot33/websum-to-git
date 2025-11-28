@@ -14,7 +14,7 @@ dependencies = [
     "python-telegram-bot",
     "openai",
     "anthropic",
-    "google-generativeai",
+    "google-genai",
     "playwright",
     "readability-lxml",
     "markdownify",
