@@ -8,20 +8,3 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     # command: ["xvfb-run", "-a", "python", "main.py", "--config", "/app/config.yaml"]
-    deploy:
-      resources:
-        # 资源限制：防止容器占用过多资源
-        limits:
-          cpus: "1.0"            # 最多使用 1 个 CPU 核心
-          memory: 2G             # 最大内存 2GB（考虑到 Camoufox 浏览器需求）
-        # 资源预留：确保容器获得最低资源保障
-        reservations:
-          cpus: "0.25"           # 至少预留 0.25 CPU 核心
-          memory: 512M           # 至少预留 512MB 内存
-    # 健康检查：监控容器运行状态
-    healthcheck:
-      test: ["CMD-SHELL", "python -c 'import sys; sys.exit(0)' || exit 1"]
-      interval: 30s            # 每 30 秒检查一次
-      timeout: 10s             # 超时时间 10 秒
-      start_period: 30s        # 启动后等待 30 秒再开始健康检查
-      retries: 3               # 失败 3 次后标记为 unhealthy

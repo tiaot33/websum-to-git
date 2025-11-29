@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # 1. 在后台启动 Xvfb，创建一个虚拟显示器，编号为 99
 # 分辨率为 1920x1080，色深为 24
@@ -12,5 +13,4 @@ sleep 2
 
 # 4. 使用虚拟环境中的 Python 执行应用
 echo "Starting application in headed mode..."
-/app/.venv/bin/python src/main.py --config /app/config.yaml
-echo "Application finished."
+exec /app/.venv/bin/python src/main.py --config /app/config.yaml

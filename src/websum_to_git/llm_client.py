@@ -59,11 +59,7 @@ class LLMClient:
         if self._config.enable_thinking:
             kwargs: dict[str, Any] = {
                 "extra_body": {
-                    "google": {
-                        "thinking_config": {
-                            "thinking_budget": 19660,
-                            "include_thoughts": "true"
-                        }},
+                    "google": {"thinking_config": {"thinking_budget": 19660, "include_thoughts": "true"}},
                     "thinking": {
                         "type": "enabled",
                     },

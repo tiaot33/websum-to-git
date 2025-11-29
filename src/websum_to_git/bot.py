@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from pathlib import Path
 
 from telegram import Update
@@ -20,6 +21,7 @@ from .pipeline import HtmlToObsidianPipeline
 logger = logging.getLogger(__name__)
 
 URL_REGEX = re.compile(r"https?://[^\s]+", re.IGNORECASE)
+HEARTBEAT_PATH = Path("/tmp/websum_bot_heartbeat")
 
 
 def extract_first_url(text: str) -> str | None:
@@ -62,6 +64,10 @@ class TelegramBotApp:
         await update.message.reply_text(message)
 
 
+async def heartbeat_job(context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG001
+    HEARTBEAT_PATH.write_text(str(int(time.time())), encoding="utf-8")
+
+
 def run_bot(config_path: str | Path = "config.yaml") -> None:
     config = load_config(config_path)
     app_config = config
@@ -71,5 +77,10 @@ def run_bot(config_path: str | Path = "config.yaml") -> None:
 
     app.add_handler(CommandHandler("start", bot_app.start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_app.handle_message))
+
+    job_queue = app.job_queue
+    if job_queue is None:
+        raise RuntimeError("JobQueue is not configured")
+    job_queue.run_repeating(heartbeat_job, interval=60, first=0)
 
     app.run_polling()

@@ -59,7 +59,7 @@ USER appuser
 
 # 健康检查（每 30 秒检查一次）
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)" || exit 1
+    CMD python -c "from pathlib import Path; import sys, time; p = Path('/tmp/websum_bot_heartbeat'); t = float(p.read_text().strip()) if p.is_file() else 0.0; sys.exit(0 if time.time() - t < 120 else 1)" || exit 1
 
 # 启动应用
 ENTRYPOINT ["/app/entrypoint.sh"]

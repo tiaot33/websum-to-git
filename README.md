@@ -97,6 +97,8 @@ docker run --rm \
   websum-to-git
 ```
 
+容器内通过 `JobQueue` 定期在 `/tmp/websum_bot_heartbeat` 写入心跳文件，Docker `HEALTHCHECK` 会检测该心跳是否在最近一段时间内更新，以此判断 Bot 主循环是否仍然健康运行。
+
 如需使用自定义配置路径，可在 `docker run` 时覆盖命令，例如：`docker run ... websum-to-git python src/main.py --config /app/your-config.yaml`。
 
 也可使用 `docker-compose.yaml`：
