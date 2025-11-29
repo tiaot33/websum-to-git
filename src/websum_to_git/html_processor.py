@@ -106,25 +106,35 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
                     page.wait_for_load_state("networkidle", timeout=8000)
                 except Exception:
                     pass
-                # 缓慢滚动至页面底部，触发懒加载图片/内容
-                # 获取页面总高度并分步滚动
-                total_height = page.evaluate("document.body.scrollHeight")
-                viewport_height = page.evaluate("window.innerHeight")
-                scroll_distance = total_height - viewport_height
-                # 分10次滚动，每次间隔300ms
-                steps = 10
-                step_size = scroll_distance / steps
-                for _i in range(steps):
-                    page.mouse.wheel(0, step_size)
-                    time.sleep(0.3)
+                # 以较慢速度滚动至页面底部，触发懒加载图片/内容
+                page.evaluate(
+                    """
+                    async () => {
+                        const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+                        const step = window.innerHeight / 2 || 400;
+                        const maxScroll =
+                            document.body.scrollHeight || document.documentElement.scrollHeight || 0;
+                        let position = 0;
+
+                        while (position < maxScroll) {
+                            window.scrollTo(0, position);
+                            const randomDelay = 300 + Math.random() * 500; // 300-800ms 随机延迟
+                            await delay(randomDelay);
+                            position += step;
+                        }
+
+                        window.scrollTo(0, maxScroll);
+                    }
+                    """
+                )
+                time.sleep(2)
                 # 等待懒加载内容完成
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(8000)
                 if response and response.status >= 400:
                     status_text = getattr(response, "status_text", "") or ""
                     raise HeadlessFetchError(f"Headless 抓取失败: HTTP {response.status} {status_text}".strip())
                 html = page.content()
                 final_url = page.url
-
             except HeadlessFetchError:
                 raise
             except Exception as exc:
