@@ -130,9 +130,13 @@ class HtmlToObsidianPipeline:
             system_prompt=_load_prompt("generate_tags"),
             user_content=user_content,
         ).strip()
-        # 解析输出为标签列表，每行一个标签
-        tags = [line.strip() for line in raw_output.split("\n") if line.strip()]
-        return tags[:10]  # 最多返回 10 个标签
+        # 解析输出为标签列表，每行一个标签，并去除标签内的空格
+        tags = [
+            line.strip().replace(" ", "")
+            for line in raw_output.split("\n")
+            if line.strip()
+        ]
+        return tags  # 最多返回 10 个标签
 
     def _is_chinese_text(self, text: str) -> bool:
         """检测文本是否主要为中文。"""
@@ -180,7 +184,6 @@ class HtmlToObsidianPipeline:
             "---",
             f"source: {page.final_url}",
             f"created_at: {now}",
-            f"title: {page.title}",
             "tags:",
         ]
         # tags 使用多行列表格式

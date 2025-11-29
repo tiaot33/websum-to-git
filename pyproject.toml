@@ -11,7 +11,7 @@ dependencies = [
     "requests",
     "pyyaml",
     "beautifulsoup4",
-    "python-telegram-bot",
+    "python-telegram-bot[job-queue]",
     "openai",
     "anthropic",
     "google-genai",
