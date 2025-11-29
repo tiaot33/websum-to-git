@@ -1,0 +1,69 @@
+# Python 缓存和编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 虚拟环境（UV 会在构建时重新创建）
+venv/
+.venv/
+ENV/
+env/
+
+# IDE 配置
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# 测试和覆盖率
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# 文档（仅保留 README.md）
+docs/
+*.md
+!README.md
+
+# 配置文件（不打包到镜像，运行时通过 volume 挂载）
+config.yaml
+config.example.yaml
+.env
+.env.local
+*.log
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker 相关（避免递归复制）
+Dockerfile*
+!Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# OpenSpec 变更记录（运行时不需要）
+openspec/
+
+# 其他
+.DS_Store
+Thumbs.db
+*.bak
+*.tmp

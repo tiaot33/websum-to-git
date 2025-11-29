@@ -184,7 +184,7 @@ tags:
 |------|------|------|
 | `PageContent` | dataclass | 网页内容数据结构 |
 | `fetch_html(url, timeout, verify)` | function | 使用 requests 抓取 |
-| `fetch_html_headless(url, timeout)` | function | 使用 Playwright 抓取 |
+| `fetch_html_headless(url, timeout)` | function | 使用 Camoufox 抓取 |
 | `parse_page(url, html, final_url)` | function | 解析 HTML 提取正文 |
 | `HeadlessFetchError` | exception | Headless 抓取异常 |
 
@@ -211,7 +211,7 @@ class PageContent:
 **内部函数**:
 - `_html_to_markdown(html)`: markdownify 封装，配置 ATX 风格标题
 
-**依赖**: `requests`, `playwright`, `beautifulsoup4`, `readability-lxml`, `markdownify`
+**依赖**: `requests`, `camoufox`, `beautifulsoup4`, `readability-lxml`, `markdownify`
 
 ---
 

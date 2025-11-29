@@ -36,7 +36,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 **技术栈**：
 - **运行时**: Python 3.13 + UV 包管理
 - **通信**: Telegram Bot API, GitHub API, 多厂商 LLM API (OpenAI/Anthropic/Gemini)
-- **数据处理**: requests/Playwright, BeautifulSoup, readability-lxml, markdownify, tiktoken
+- **数据处理**: requests/Camoufox, BeautifulSoup, readability-lxml, markdownify, tiktoken
 - **工具链**: pyright (类型检查), ruff (代码检查/格式化)
 
 ## 架构图

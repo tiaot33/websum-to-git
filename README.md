@@ -75,19 +75,20 @@
 `config.yaml` 中的 `http.fetch_mode` 决定抓取网页的方式：
 
 - `requests`（默认）：直接使用 `requests` 抓取 HTML，速度快，适合大多数静态页面
-- `headless`：通过 Playwright + Chromium 渲染页面后再提取 HTML，适合依赖 JS 渲染或懒加载的页面
+- `headless`：通过 Camoufox (Firefox) 渲染页面后再提取 HTML，适合依赖 JS 渲染或懒加载的页面，内置反指纹检测能力
 
 启用 `headless` 时请先安装浏览器内核：
 
 ```bash
-playwright install chromium
+pip install -U camoufox[geoip]
+python -m camoufox fetch
 ```
 
-在 Linux 服务器上如遇到缺失系统依赖，可参考 [Playwright 官方文档](https://playwright.dev/python/docs/intro) 安装 `libnss3`、`libatk1.0-0`、`libx11-xcb1` 等必要库。
+在 Linux 服务器上如遇到缺失系统依赖，请安装 Firefox 运行依赖：`libgtk-3-0`、`libdbus-glib-1-2`、`libxt6`、`libx11-xcb1`、`libasound2` 等。
 
 ## Docker 部署
 
-仓库根目录提供了 `Dockerfile`，基于 `mcr.microsoft.com/playwright/python` 构建，已预装 Chromium：
+仓库根目录提供了 `Dockerfile`，基于 `python:3.13-slim` 构建，已预装 Camoufox (Firefox)：
 
 ```bash
 docker build -t websum-to-git .

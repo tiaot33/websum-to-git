@@ -5,8 +5,7 @@ python-telegram-bot
 openai
 anthropic
 google-genai
-playwright
-playwright-stealth<2.0.0
 readability-lxml
 markdownify
 tiktoken
+camoufox[geoip]

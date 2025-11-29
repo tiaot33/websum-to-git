@@ -10,7 +10,7 @@ export DISPLAY=:99
 # 3. 等待 Xvfb 完全启动 (可选，但建议)
 sleep 2
 
-# 4. 执行 Playwright Python 脚本
-echo "Starting Playwright script in headed mode..."
-python main.py --config /app/config.yaml
-echo "Playwright script finished."
+# 4. 使用虚拟环境中的 Python 执行应用
+echo "Starting application in headed mode..."
+/app/.venv/bin/python src/main.py --config /app/config.yaml
+echo "Application finished."

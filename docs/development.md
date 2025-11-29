@@ -25,7 +25,7 @@
   - 从 YAML 加载配置并进行基本校验（必填字段）
 - `websum_to_git/html_processor.py`
   - `fetch_html(url)`: 使用 `requests` 获取 HTML
-  - `fetch_html_headless(url)`: 使用 Playwright + Chromium 渲染页面并返回最终 HTML/URL
+  - `fetch_html_headless(url)`: 使用 Camoufox (Firefox) 渲染页面并返回最终 HTML/URL
   - `parse_page(url, html, final_url)`: 使用 `BeautifulSoup`:
     - 清理 `script/style/noscript`
     - 从 `<title>` 获取标题（fallback 为最终 URL）
@@ -67,10 +67,11 @@ pip install -r requirements.txt
 如需使用 `http.fetch_mode = headless`，请额外执行（首次即可）：
 
 ```bash
-playwright install chromium
+pip install -U camoufox[geoip]
+python -m camoufox fetch
 ```
 
-Linux 环境若报错缺少系统库，请按 [Playwright 官方要求](https://playwright.dev/python/docs/intro) 安装 `libnss3`、`libatk1.0-0`、`libx11-xcb1` 等依赖。
+Linux 环境若报错缺少系统库，请安装 Firefox 运行依赖：`libgtk-3-0`、`libdbus-glib-1-2`、`libxt6`、`libx11-xcb1`、`libasound2` 等。
 
 3. 准备配置文件
 

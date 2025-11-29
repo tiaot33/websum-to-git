@@ -15,11 +15,10 @@ dependencies = [
     "openai",
     "anthropic",
     "google-genai",
-    "playwright",
     "readability-lxml",
     "markdownify",
     "tiktoken",
-    "playwright-stealth<2.0.0",
+    "camoufox[geoip]>=0.4.11",
 ]
 
 [project.scripts]

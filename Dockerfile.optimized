@@ -1,36 +1,36 @@
 # ========================================
 # 多阶段构建 - 构建阶段
 # ========================================
-FROM python:3.13-slim AS builder
+FROM python:3.13.1-slim AS builder
 
 WORKDIR /app
 
-# 安装 UV（快速的 Python 包管理器）
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# 安装构建依赖(如果需要编译 Python 包)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖配置文件
-COPY pyproject.toml uv.lock ./
+# 复制依赖文件并安装到用户目录
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# 使用 UV 安装依赖到 .venv（带缓存加速）
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
-
-# 预下载 Camoufox 浏览器内核
-RUN .venv/bin/python -m camoufox fetch
+# 预下载 Camoufox 浏览器(在构建阶段完成)
+RUN python -m camoufox fetch
 
 # ========================================
 # 多阶段构建 - 运行阶段
 # ========================================
-FROM python:3.13-slim
+FROM python:3.13.1-slim
 
 WORKDIR /app
 
-# 环境变量配置
+# 环境变量
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH=/home/appuser/.local/bin:$PATH
 
-# 安装 Camoufox 运行时依赖 + Xvfb（虚拟显示）+ 清理缓存
+# 安装 Camoufox 运行时依赖 + Xvfb(虚拟显示)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     libgtk-3-0 \
@@ -40,24 +40,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建非 root 用户（安全最佳实践）
+# 创建非 root 用户
 RUN addgroup --system --gid 1001 appuser && \
     adduser --system --uid 1001 --gid 1001 appuser
 
-# 从构建阶段复制虚拟环境（包含所有依赖）
-COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+# 从构建阶段复制 Python 包
+COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 
-# 复制应用源码
+# 复制应用代码
 COPY --chown=appuser:appuser src /app/src
 COPY --chown=appuser:appuser entrypoint.sh /app/entrypoint.sh
 
 # 设置执行权限
 RUN chmod +x /app/entrypoint.sh
 
-# 切换到非 root 用户运行
+# 切换到非 root 用户
 USER appuser
 
-# 健康检查（每 30 秒检查一次）
+# 健康检查(每 30 秒检查一次)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD python -c "import sys; sys.exit(0)" || exit 1
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from urllib.parse import quote, urljoin, urlparse
 
@@ -69,43 +70,25 @@ def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> tuple[str, s
 
 
 def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
-    """使用 Playwright 抓取 HTML，返回 (html, final_url)。"""
+    """使用 Camoufox 抓取 HTML，返回 (html, final_url)。
+
+    Camoufox 是基于 Firefox 的反指纹浏览器，内置类人鼠标移动等特性。
+    """
 
     try:
-        from playwright.sync_api import (  # type: ignore import-not-found
-            TimeoutError as PlaywrightTimeoutError,
-        )
-        from playwright.sync_api import (
-            sync_playwright,
-        )
+        from camoufox.sync_api import Camoufox
     except ModuleNotFoundError as exc:  # pragma: no cover - 运行期缺依赖
         raise HeadlessFetchError(
-            "Playwright 未安装，请执行 `pip install playwright` 并运行 `playwright install chromium`"
+            "Camoufox 未安装，请执行 `pip install -U camoufox[geoip]` 并运行 `python -m camoufox fetch`"
         ) from exc
 
     try:
-        with sync_playwright() as p:
-            # 默认使用有头浏览器，配合 Docker 中的 Xvfb 或宿主机 X Server 使用
-            browser = p.chromium.launch(headless=False, args=["--disable-blink-features=AutomationControlled"])
-            context = browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                user_agent=DEFAULT_HEADERS["User-Agent"],
-                locale="zh-CN",
-                timezone_id="Asia/Shanghai",
-                permissions=["geolocation"],
-                extra_http_headers=_HEADLESS_EXTRA_HEADERS,
-            )
-            context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
-            try:
-                from playwright_stealth import (  # type: ignore import-not-found
-                    stealth_sync,
-                )
-            except ModuleNotFoundError:
-                stealth_sync = None  # type: ignore[assignment]
-
-            page = context.new_page()
-            if stealth_sync is not None:
-                stealth_sync(page)
+        with Camoufox(
+            geoip=True,
+            config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5, "showcursor": True},
+            # headless="virtual"
+        ) as browser:
+            page = browser.new_page()
 
             try:
                 response = page.goto(
@@ -113,52 +96,42 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
                     timeout=max(timeout, 1) * 1000,
                     wait_until="domcontentloaded",
                 )
-                # 继续等待页面完成主要资源加载，给懒加载内容留出时间
+
+                # 继续等待页面完成主要资源加载
                 try:  # noqa: SIM105
-                    page.wait_for_load_state("load")
-                except PlaywrightTimeoutError:
+                    page.wait_for_load_state("load", timeout=8000)
+                except Exception:
                     pass
                 try:  # noqa: SIM105
                     page.wait_for_load_state("networkidle", timeout=8000)
-                except PlaywrightTimeoutError:
+                except Exception:
                     pass
-                page.wait_for_timeout(3000)
                 # 缓慢滚动至页面底部，触发懒加载图片/内容
-                page.evaluate(
-                    """
-(() => {
-    return new Promise((resolve) => {
-        const scrollingElement = document.scrollingElement || document.documentElement;
-        const viewport = window.innerHeight || document.documentElement.clientHeight || 800;
-        const step = Math.max(Math.floor(viewport * 0.75), 300);
-        const delay = 250;
-
-        const scroll = () => {
-            const { scrollTop, scrollHeight, clientHeight } = scrollingElement;
-            if (scrollTop + clientHeight >= scrollHeight) {
-                resolve();
-                return;
-            }
-            window.scrollBy(0, step);
-            setTimeout(scroll, delay);
-        };
-
-        scroll();
-    });
-})()
-"""
-                )
-                page.wait_for_timeout(5000)
+                # 获取页面总高度并分步滚动
+                total_height = page.evaluate("document.body.scrollHeight")
+                viewport_height = page.evaluate("window.innerHeight")
+                scroll_distance = total_height - viewport_height
+                # 分10次滚动，每次间隔300ms
+                steps = 10
+                step_size = scroll_distance / steps
+                for _i in range(steps):
+                    page.mouse.wheel(0, step_size)
+                    time.sleep(0.3)
+                # 等待懒加载内容完成
+                page.wait_for_timeout(3000)
                 if response and response.status >= 400:
                     status_text = getattr(response, "status_text", "") or ""
                     raise HeadlessFetchError(f"Headless 抓取失败: HTTP {response.status} {status_text}".strip())
                 html = page.content()
                 final_url = page.url
-            finally:
-                context.close()
-                browser.close()
-    except PlaywrightTimeoutError as exc:
-        raise HeadlessFetchError(f"Headless 抓取超时: {url}") from exc
+
+            except HeadlessFetchError:
+                raise
+            except Exception as exc:
+                raise HeadlessFetchError(f"Headless 页面加载失败: {url}") from exc
+
+    except HeadlessFetchError:
+        raise
     except Exception as exc:  # pragma: no cover - 多种底层异常
         raise HeadlessFetchError(f"Headless 抓取失败: {url}") from exc
 

@@ -28,7 +28,8 @@ pip install -r requirements.txt
 如需启用无头浏览器模式，请额外运行（首次即可）：
 
 ```bash
-playwright install chromium
+pip install -U camoufox[geoip]
+python -m camoufox fetch
 ```
 
 ## 2. 准备必要账号与凭证
@@ -92,7 +93,7 @@ http:
 
 > 提示：请务必不要将包含真实密钥的 `config.yaml` 提交到 GitHub 公共仓库。
 
-若你将 `fetch_mode` 设置为 `headless`，请确保已执行前述 `playwright install chromium`，并在 Linux 服务器上按 Playwright 官方文档安装所需的系统库（如 `libnss3`、`libatk1.0-0` 等）。
+若你将 `fetch_mode` 设置为 `headless`，请确保已执行前述 `python -m camoufox fetch`，并在 Linux 服务器上安装 Firefox 运行依赖（如 `libgtk-3-0`、`libdbus-glib-1-2`、`libxt6` 等）。
 
 ## 4. 运行服务
 
