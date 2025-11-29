@@ -124,6 +124,7 @@ llm:
   api_key: "xxx"            # 必填: LLM API Key
   model: "gpt-4o"           # 必填: 模型名称
   base_url: null            # 可选: 自定义 API 端点
+  enable_thinking: true     # 可选: 是否启用 thinking/reasoning (默认 true)
 github:
   repo: "owner/repo"        # 必填: 目标仓库
   pat: "xxx"                # 必填: GitHub PAT

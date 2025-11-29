@@ -11,6 +11,10 @@ llm:
   base_url: "https://api.openai.com"
   api_key: "YOUR_LLM_API_KEY"
   model: "gpt-4.1-mini"
+  # 是否启用模型的 thinking/reasoning 功能
+  # 支持: OpenAI (extra_body), OpenAI-Response (reasoning.effort), Anthropic (thinking), Gemini (ThinkingConfig)
+  # 默认为 true；设为 false 可关闭以节省 token 消耗
+  enable_thinking: true
 
 llm_fast:
   # 用于标签和翻译的快速模型，可单独配置到不同端口/服务
@@ -18,6 +22,8 @@ llm_fast:
   base_url: "https://fast-llm.example.com"
   api_key: "YOUR_FAST_LLM_API_KEY"
   model: "gpt-4o-mini"
+  # 快速模型通常不需要 thinking，可设为 false
+  enable_thinking: false
 
 github:
   repo: "owner/repo"           # 例如: yourname/your-notes-repo

@@ -11,6 +11,8 @@ class LLMConfig:
     api_key: str
     model: str
     base_url: str | None = None
+    # 是否启用模型的 thinking/reasoning 功能（目前仅 Gemini 支持）
+    enable_thinking: bool = True
 
 
 @dataclass
@@ -59,11 +61,15 @@ def _build_llm_config(llm_raw: dict[str, Any]) -> LLMConfig:
         # 对于 OpenAI/兼容服务，如果未指定 base_url，则使用官方默认地址
         base_url = base_url or "https://api.openai.com"
 
+    # enable_thinking 默认为 True，配置中可显式设为 false 关闭
+    enable_thinking = llm_raw.get("enable_thinking", True)
+
     return LLMConfig(
         provider=provider,
         api_key=api_key,
         model=model,
         base_url=base_url,
+        enable_thinking=bool(enable_thinking),
     )
 
 

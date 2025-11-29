@@ -55,11 +55,26 @@ class LLMClient:
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_content})
-
+        kwargs: dict[str, Any] = {}
+        if self._config.enable_thinking:
+            kwargs: dict[str, Any] = {
+                "extra_body": {
+                    "google": {
+                        "thinking_config": {
+                            "thinking_budget": 19660,
+                            "include_thoughts": "true"
+                        }},
+                    "thinking": {
+                        "type": "enabled",
+                    },
+                    "reasoning_effort": {"high"},
+                }
+            }
         resp = self._client.chat.completions.create(
             model=self._config.model,
             messages=messages,
             temperature=1.0,
+            **kwargs,
         )
         return resp.choices[0].message.content or ""
 
@@ -70,12 +85,14 @@ class LLMClient:
         if system_prompt:
             input_segments.append({"role": "system", "content": system_prompt})
         input_segments.append({"role": "user", "content": user_content})
-
         resp = self._client.responses.create(
             model=self._config.model,
             input=input_segments,
+            reasoning={"effort": "high" if self._config.enable_thinking else "none"},
             temperature=1.0,
         )
+        if hasattr(resp, "output_text") and resp.output_text:
+            return resp.output_text
 
         parts: list[str] = []
         for item in getattr(resp, "output", []) or []:
@@ -97,12 +114,13 @@ class LLMClient:
         # Anthropic 原生 SDK，使用 messages API
         kwargs: dict[str, Any] = {
             "model": self._config.model,
-            "temperature": 1.0,
+            "max_token": 32000,
             "messages": [{"role": "user", "content": user_content}],
         }
         if system_prompt:
             kwargs["system"] = system_prompt
-
+        if self._config.enable_thinking:
+            kwargs["thinking"] = True
         resp = self._client.messages.create(**kwargs)
 
         parts: list[str] = []
@@ -125,10 +143,16 @@ class LLMClient:
 
         model_name = self._config.model or ""
         thinking_config: types.ThinkingConfig | None = None
-        if model_name.startswith("gemini-2.5-pro"):
-            thinking_config = types.ThinkingConfig(thinking_budget=32768)
-        elif model_name.startswith("gemini-3-pro"):
-            thinking_config = types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH)
+        # 仅在 enable_thinking=True 时启用 thinking 功能
+        if self._config.enable_thinking:
+            if model_name.startswith("gemini-2.5-pro"):
+                thinking_config = types.ThinkingConfig(thinking_budget=32768)
+            elif model_name.startswith("gemini-2.5-flash"):
+                thinking_config = types.ThinkingConfig(thinking_budget=19660)
+            elif model_name.startswith("gemini-3-pro"):
+                thinking_config = types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH)
+        else:
+            thinking_config = types.ThinkingConfig(thinking_budget=0)
         generate_kwargs: dict[str, Any] = {
             "model": model_name,
             "contents": contents,

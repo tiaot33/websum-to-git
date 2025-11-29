@@ -58,7 +58,7 @@ graph LR
 **关键导出**:
 | 符号 | 类型 | 说明 |
 |------|------|------|
-| `LLMConfig` | dataclass | LLM 服务配置 (provider, api_key, model, base_url) |
+| `LLMConfig` | dataclass | LLM 服务配置 (provider, api_key, model, base_url, enable_thinking) |
 | `GitHubConfig` | dataclass | GitHub 仓库配置 (repo, branch, target_dir, pat) |
 | `TelegramConfig` | dataclass | Telegram Bot 配置 (bot_token) |
 | `HttpConfig` | dataclass | HTTP 抓取配置 (verify_ssl, fetch_mode) |
@@ -278,14 +278,23 @@ class PageContent:
 | `gemini` | google-generativeai | Google Gemini API |
 
 **内部方法**:
-- `_generate_with_openai(system_prompt, user_content)`: chat.completions
-- `_generate_with_openai_response(system_prompt, user_content)`: responses API
-- `_generate_with_anthropic(system_prompt, user_content)`: messages API
-- `_generate_with_gemini(system_prompt, user_content)`: generate_content
+- `_generate_with_openai(system_prompt, user_content)`: chat.completions，支持通过 extra_body 传递 thinking 配置
+- `_generate_with_openai_response(system_prompt, user_content)`: responses API，通过 reasoning.effort 控制推理
+- `_generate_with_anthropic(system_prompt, user_content)`: messages API，通过 thinking 参数启用
+- `_generate_with_gemini(system_prompt, user_content)`: generate_content，通过 ThinkingConfig 控制
 
 **默认参数**:
-- `temperature = 0.2` (追求稳定输出)
-- `max_tokens = 4096` (仅 Anthropic)
+- `temperature = 1.0` (支持 thinking 模式)
+- `max_tokens = 32000` (仅 Anthropic)
+- `enable_thinking = True` (默认启用推理/思考功能)
+
+**Thinking 功能支持**:
+| Provider | 启用方式 | 说明 |
+|----------|----------|------|
+| `openai` | extra_body.thinking | 通过 google/thinking/reasoning_effort 配置 |
+| `openai-response` | reasoning.effort | high (启用) / none (禁用) |
+| `anthropic` | thinking=True | 启用扩展思考模式 |
+| `gemini` | ThinkingConfig | 2.5-pro: budget=32768, 2.5-flash: budget=19660, 3-pro: HIGH |
 
 **依赖**: `openai`, `anthropic`, `google-generativeai`
 
