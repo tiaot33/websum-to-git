@@ -15,9 +15,6 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 
-# 预下载 Camoufox 浏览器内核
-RUN .venv/bin/python -m camoufox fetch
-
 # ========================================
 # 多阶段构建 - 运行阶段
 # ========================================
@@ -25,7 +22,6 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# 环境变量配置（显式设置 HOME，避免系统用户默认 /nonexistent）
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
@@ -46,6 +42,8 @@ RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 # 从构建阶段复制虚拟环境（包含所有依赖）
 COPY --from=builder /app/.venv /app/.venv
+# 预下载 Camoufox 浏览器内核
+RUN /app/.venv/bin/python -m camoufox fetch
 
 # 复制应用源码
 COPY src /app/src

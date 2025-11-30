@@ -86,7 +86,7 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
         with Camoufox(
             geoip=True,
             config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5, "showcursor": True},
-            # headless="virtual"
+            headless="virtual"
         ) as browser:
             page = browser.new_page()
 
