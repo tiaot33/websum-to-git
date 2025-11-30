@@ -7,8 +7,9 @@ import time
 from io import BytesIO
 from pathlib import Path
 
-from telegram import InputFile, Update
+from telegram import BotCommand, InputFile, Update
 from telegram.ext import (
+    Application,
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
@@ -26,6 +27,23 @@ logger = logging.getLogger(__name__)
 URL_REGEX = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 HEARTBEAT_PATH = Path("/tmp/websum_bot_heartbeat")
 
+# Bot 命令定义
+BOT_COMMANDS = [
+    BotCommand("start", "开始使用 - 显示欢迎信息"),
+    BotCommand("help", "帮助 - 显示可用命令列表"),
+    BotCommand("url2img", "网页截图 - 将网页转换为图片"),
+]
+
+HELP_TEXT = """📚 *WebSum Bot 命令列表*
+
+/start - 开始使用，显示欢迎信息
+/help - 显示此帮助信息
+/url2img <链接> - 将网页转换为截图
+
+💡 *使用技巧*
+• 直接发送网页链接即可自动总结并保存到 GitHub
+• 使用 /url2img 命令可以获取网页的完整截图"""
+
 
 def extract_first_url(text: str) -> str | None:
     match = URL_REGEX.search(text)
@@ -37,10 +55,23 @@ class TelegramBotApp:
         self._config = config
         self._pipeline = HtmlToObsidianPipeline(config)
 
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
         if not update.message:
             return
-        await update.message.reply_text("请发送包含 HTML 网页地址的消息，我会帮你摘要并同步到 GitHub。")
+        welcome_text = (
+            "👋 欢迎使用 WebSum Bot！\n\n"
+            "请发送包含网页地址的消息，我会帮你：\n"
+            "• 自动抓取网页内容\n"
+            "• 使用 AI 生成摘要\n"
+            "• 同步笔记到 GitHub\n\n"
+            "输入 /help 查看所有可用命令"
+        )
+        await update.message.reply_text(welcome_text)
+
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
+        if not update.message:
+            return
+        await update.message.reply_text(HELP_TEXT, parse_mode="Markdown")
 
     async def url2img(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
         if not update.message or not update.message.text:
@@ -104,14 +135,21 @@ async def heartbeat_job(context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: AR
     HEARTBEAT_PATH.write_text(str(int(time.time())), encoding="utf-8")
 
 
+async def post_init(application: Application) -> None:
+    """Bot 启动后设置命令菜单"""
+    await application.bot.set_my_commands(BOT_COMMANDS)
+    logger.info("Bot 命令菜单已设置: %s", [cmd.command for cmd in BOT_COMMANDS])
+
+
 def run_bot(config_path: str | Path = "config.yaml") -> None:
     config = load_config(config_path)
     app_config = config
-    app = ApplicationBuilder().token(app_config.telegram.bot_token).build()
+    app = ApplicationBuilder().token(app_config.telegram.bot_token).post_init(post_init).build()
 
     bot_app = TelegramBotApp(app_config)
 
     app.add_handler(CommandHandler("start", bot_app.start))
+    app.add_handler(CommandHandler("help", bot_app.help_command))
     app.add_handler(CommandHandler("url2img", bot_app.url2img))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_app.handle_message))
 
