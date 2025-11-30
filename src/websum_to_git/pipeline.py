@@ -16,7 +16,7 @@ from .telegraph_client import TelegraphClient
 logger = logging.getLogger(__name__)
 
 # 单次 LLM 请求最大输入 token 数
-_MAX_INPUT_TOKENS = 32000
+_MAX_INPUT_TOKENS = 10000
 
 # 提示词文件路径
 _PROMPTS_DIR = Path(__file__).parent / "prompts"

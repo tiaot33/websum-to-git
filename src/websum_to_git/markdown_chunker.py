@@ -91,6 +91,9 @@ def _split_into_paragraphs(text: str) -> list[ParagraphBlock]:
         current.append(line)
 
     if current:
+        # 处理未闭合的代码块：补充闭合 fence 以保持 Markdown 格式完整性
+        if in_code_block and active_fence:
+            current.append(active_fence)
         flush_current()
 
     if not paragraphs:
@@ -101,6 +104,9 @@ def _split_into_paragraphs(text: str) -> list[ParagraphBlock]:
 
 def _build_chunks(paragraphs: list[ParagraphBlock], max_tokens: int) -> list[str]:
     """按段落拼接为多个 chunk，基于 tiktoken 估算并保持 Markdown 完整性。"""
+    if max_tokens <= 0:
+        return [p.text for p in paragraphs if p.text.strip()]
+
     chunks: list[str] = []
     current: list[str] = []
     current_len = 0
@@ -147,7 +153,10 @@ def _build_chunks(paragraphs: list[ParagraphBlock], max_tokens: int) -> list[str
 
     flush_current()
 
-    return chunks
+    if not chunks or max_tokens <= 0:
+        return chunks
+
+    return _rebalance_chunks(chunks, max_tokens)
 
 
 def _split_plain_text_chunks(text: str, max_len: int, *, preserve_whitespace: bool = False) -> list[str]:
@@ -278,6 +287,40 @@ def estimate_token_length(text: str) -> int:
         return 0
     encoder = _get_token_encoder()
     return len(encoder.encode(text, disallowed_special=()))
+
+
+def _rebalance_chunks(chunks: list[str], max_tokens: int) -> list[str]:
+    """二次合并相邻 chunk，使单块 token 数更接近 max_tokens（不超过上限）。"""
+    if max_tokens <= 0 or len(chunks) <= 1:
+        return chunks
+
+    # 预先估算每个 chunk 的 token 数，避免重复编码
+    token_lengths = [estimate_token_length(chunk) for chunk in chunks]
+    separator_tokens = estimate_token_length("\n\n")
+
+    merged: list[str] = []
+    current = chunks[0].strip("\n")
+    current_tokens = token_lengths[0]
+
+    for next_chunk, next_tokens in zip(chunks[1:], token_lengths[1:]):
+        if not next_chunk.strip():
+            continue
+
+        # 估算合并后的 token 数：现有 + 分隔符 + 下一个
+        extra = separator_tokens if current else 0
+        if current and current_tokens + extra + next_tokens <= max_tokens:
+            current = (current.rstrip("\n") + "\n\n" + next_chunk.lstrip("\n")).strip("\n")
+            current_tokens = current_tokens + extra + next_tokens
+        else:
+            if current.strip():
+                merged.append(current.strip("\n"))
+            current = next_chunk.strip("\n")
+            current_tokens = next_tokens
+
+    if current.strip():
+        merged.append(current.strip("\n"))
+
+    return merged
 
 
 def _hard_split_by_tokens(text: str, max_len: int, *, preserve_whitespace: bool = False) -> list[str]:
