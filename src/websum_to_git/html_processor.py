@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import time
+import contextlib
 from dataclasses import dataclass
 from urllib.parse import quote, urljoin, urlparse
 
@@ -82,11 +82,13 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
             "Camoufox 未安装，请执行 `pip install -U camoufox[geoip]` 并运行 `python -m camoufox fetch`"
         ) from exc
 
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
     try:
         with Camoufox(
             geoip=True,
-            config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5, "showcursor": True},
-            headless="virtual"
+            config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5},
+            headless="virtual",
         ) as browser:
             page = browser.new_page()
 
@@ -97,48 +99,61 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
                     wait_until="domcontentloaded",
                 )
 
-                # 继续等待页面完成主要资源加载
-                try:  # noqa: SIM105
-                    page.wait_for_load_state("load", timeout=8000)
-                except Exception:
-                    pass
-                try:  # noqa: SIM105
-                    page.wait_for_load_state("networkidle", timeout=8000)
-                except Exception:
-                    pass
-                # 以较慢速度滚动至页面底部，触发懒加载图片/内容
-                page.evaluate(
-                    """
-                    async () => {
-                        const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-                        const step = window.innerHeight / 2 || 400;
-                        const maxScroll =
-                            document.body.scrollHeight || document.documentElement.scrollHeight || 0;
-                        let position = 0;
-
-                        while (position < maxScroll) {
-                            window.scrollTo(0, position);
-                            const randomDelay = 300 + Math.random() * 500; // 300-800ms 随机延迟
-                            await delay(randomDelay);
-                            position += step;
-                        }
-
-                        window.scrollTo(0, maxScroll);
-                    }
-                    """
-                )
-                time.sleep(2)
-                # 等待懒加载内容完成
-                page.wait_for_timeout(8000)
+                # 先检查 HTTP 状态，避免对错误页面执行后续操作
                 if response and response.status >= 400:
                     status_text = getattr(response, "status_text", "") or ""
                     raise HeadlessFetchError(f"Headless 抓取失败: HTTP {response.status} {status_text}".strip())
+
+                # 继续等待页面完成主要资源加载（仅忽略超时异常）
+                with contextlib.suppress(PlaywrightTimeoutError):
+                    page.wait_for_load_state("load", timeout=8000)
+                with contextlib.suppress(PlaywrightTimeoutError):
+                    page.wait_for_load_state("networkidle", timeout=8000)
+
+                # 以较慢速度滚动至页面底部，触发懒加载图片/内容
+                # 返回 Promise 确保 evaluate() 等待滚动完成；设置最大滚动次数防止无限滚动
+                page.evaluate(
+                    """
+                    () => {
+                        return new Promise((resolve) => {
+                            const step = window.innerHeight / 2 || 400;
+                            const maxIterations = 50;  // 最多滚动 50 次，防止无限滚动页面
+                            let position = 0;
+                            let iterations = 0;
+
+                            const scrollStep = () => {
+                                const maxScroll = Math.max(
+                                    document.body.scrollHeight,
+                                    document.documentElement.scrollHeight,
+                                    0
+                                );
+                                iterations++;
+                                if (position < maxScroll && iterations < maxIterations) {
+                                    window.scrollTo(0, position);
+                                    position += step;
+                                    // 300-800ms 随机延迟，模拟人类滚动
+                                    setTimeout(scrollStep, 300 + Math.random() * 500);
+                                } else {
+                                    window.scrollTo(0, maxScroll);
+                                    resolve();
+                                }
+                            };
+                            scrollStep();
+                        });
+                    }
+                    """
+                )
+                # 等待懒加载内容完成渲染
+                page.wait_for_timeout(3000)
+
                 html = page.content()
                 final_url = page.url
             except HeadlessFetchError:
                 raise
             except Exception as exc:
                 raise HeadlessFetchError(f"Headless 页面加载失败: {url}") from exc
+            finally:
+                page.close()
 
     except HeadlessFetchError:
         raise
