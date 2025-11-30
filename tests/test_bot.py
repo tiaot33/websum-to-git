@@ -200,3 +200,34 @@ class TestTelegramBotApp:
             final_call = mock_telegram_update.message.reply_text.call_args_list[-1][0][0]
             assert "notes/test.md" in final_call
             assert "Commit" not in final_call
+
+    # ============================================================
+    # /url2img 命令测试
+    # ============================================================
+
+    @pytest.mark.asyncio
+    async def test_url2img_with_url(
+        self, bot_app: TelegramBotApp, mock_telegram_update: MagicMock, mock_telegram_context: MagicMock
+    ) -> None:
+        """/url2img 命令包含 URL 时应生成截图并发送。"""
+        mock_telegram_update.message.text = "/url2img https://example.com/article"
+
+        with patch("websum_to_git.bot.capture_screenshot") as mock_capture:
+            mock_capture.return_value = b"fake-png-bytes"
+
+            await bot_app.url2img(mock_telegram_update, mock_telegram_context)
+
+            mock_capture.assert_called_once_with("https://example.com/article")
+            mock_telegram_update.message.reply_photo.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_url2img_without_url(
+        self, bot_app: TelegramBotApp, mock_telegram_update: MagicMock, mock_telegram_context: MagicMock
+    ) -> None:
+        """/url2img 命令未包含 URL 时应返回提示。"""
+        mock_telegram_update.message.text = "/url2img 没有链接"
+
+        await bot_app.url2img(mock_telegram_update, mock_telegram_context)
+
+        mock_telegram_update.message.reply_text.assert_called()
+        mock_telegram_update.message.reply_photo.assert_not_called()

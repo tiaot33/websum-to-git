@@ -206,6 +206,7 @@ def mock_telegram_update() -> MagicMock:
     update.message = MagicMock()
     update.message.text = "请帮我总结这篇文章 https://example.com/article"
     update.message.reply_text = AsyncMock()
+    update.message.reply_photo = AsyncMock()
     return update
 
 
