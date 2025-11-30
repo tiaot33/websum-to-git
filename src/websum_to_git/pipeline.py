@@ -7,10 +7,11 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import AppConfig
-from .github_client import GitHubPublisher, PublishResult
+from .github_client import GitHubPublisher
 from .html_processor import PageContent, fetch_html, fetch_html_headless, parse_page
 from .llm_client import LLMClient
 from .markdown_chunker import estimate_token_length, split_markdown_into_chunks
+from .telegraph_client import TelegraphClient
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,16 @@ class SummaryResult:
     content: str
 
 
+@dataclass
+class PipelineResult:
+    """完整处理流程的结果。"""
+
+    file_path: str  # GitHub 文件路径
+    commit_hash: str | None  # Git commit hash
+    github_url: str | None  # GitHub 文件 Web 链接
+    telegraph_url: str | None  # Telegraph 预览链接
+
+
 def _parse_summary_result(raw_output: str) -> SummaryResult:
     """从 LLM 输出中解析第一行作为标题，其余作为内容。"""
     raw_output = raw_output.strip()
@@ -49,12 +60,13 @@ class HtmlToObsidianPipeline:
         self._llm = LLMClient(config.llm)
         self._fast_llm = LLMClient(config.fast_llm) if config.fast_llm else self._llm
         self._publisher = GitHubPublisher(config.github)
+        self._telegraph = TelegraphClient()
 
-    def process_url(self, url: str) -> PublishResult:
+    def process_url(self, url: str) -> PipelineResult:
         logger.info("开始处理 URL: %s", url)
 
         # 步骤 1: 抓取网页
-        logger.info("步骤 1/4: 抓取网页内容 (模式: %s)", self._config.http.fetch_mode)
+        logger.info("步骤 1/5: 抓取网页内容 (模式: %s)", self._config.http.fetch_mode)
         if self._config.http.fetch_mode == "headless":
             html, final_url = fetch_html_headless(url)
         else:
@@ -65,31 +77,49 @@ class HtmlToObsidianPipeline:
         logger.info("抓取完成, HTML 长度: %d, 最终 URL: %s", len(html), final_url)
 
         # 步骤 2: 解析页面
-        logger.info("步骤 2/4: 解析页面内容")
+        logger.info("步骤 2/5: 解析页面内容")
         page = parse_page(url=url, html=html, final_url=final_url)
         logger.info("解析完成, 标题: %s, Markdown 长度: %d", page.title, len(page.markdown))
 
         # 步骤 3: LLM 总结
-        logger.info("步骤 3/4: 调用 LLM 生成摘要")
+        logger.info("步骤 3/5: 调用 LLM 生成摘要")
         summary_result = self._summarize_page(page)
         logger.info("摘要生成完成, AI 标题: %s", summary_result.ai_title)
 
-        # 步骤 4: 构建 Markdown 并发布
-        logger.info("步骤 4/4: 构建 Markdown 并发布到 GitHub")
+        # 步骤 4: 构建 Markdown 并发布到 GitHub
+        logger.info("步骤 4/5: 构建 Markdown 并发布到 GitHub")
         full_markdown = self._build_markdown(
             page=page,
             summary_result=summary_result,
         )
         logger.info("Markdown 构建完成, 总长度: %d", len(full_markdown))
 
-        result = self._publisher.publish_markdown(
+        github_result = self._publisher.publish_markdown(
             content=full_markdown,
             source=page.final_url,
             title=summary_result.ai_title,
         )
-        logger.info("发布成功, 文件路径: %s, commit: %s", result.file_path, result.commit_hash)
+        logger.info("GitHub 发布成功, 文件路径: %s, commit: %s", github_result.file_path, github_result.commit_hash)
 
-        return result
+        # 步骤 5: 上传到 Telegraph
+        logger.info("步骤 5/5: 上传到 Telegraph")
+        telegraph_url: str | None = None
+        try:
+            telegraph_result = self._telegraph.publish_markdown(
+                title=summary_result.ai_title,
+                content=full_markdown,
+            )
+            telegraph_url = telegraph_result.url
+            logger.info("Telegraph 发布成功: %s", telegraph_url)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Telegraph 发布失败 (非致命): %s", exc)
+
+        return PipelineResult(
+            file_path=github_result.file_path,
+            commit_hash=github_result.commit_hash,
+            github_url=github_result.web_url,
+            telegraph_url=telegraph_url,
+        )
 
     def _summarize_page(self, page: PageContent) -> SummaryResult:
         """将网页正文内容转换为适合 Obsidian 的 Markdown 摘要。"""

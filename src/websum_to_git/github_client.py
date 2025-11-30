@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class PublishResult:
     file_path: str
     commit_hash: str | None
+    web_url: str | None  # GitHub 文件的 Web 链接
 
 
 class GitHubPublisher:
@@ -77,4 +78,9 @@ class GitHubPublisher:
                 commit_hash = commit.get("sha")
 
         logger.info("文件已发布, commit hash: %s", commit_hash)
-        return PublishResult(file_path=path, commit_hash=commit_hash)
+
+        # 构建 GitHub Web 链接
+        web_url = f"https://github.com/{self._config.repo}/blob/{self._config.branch}/{path}"
+        logger.info("GitHub 文件链接: %s", web_url)
+
+        return PublishResult(file_path=path, commit_hash=commit_hash, web_url=web_url)

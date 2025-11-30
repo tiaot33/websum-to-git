@@ -125,10 +125,14 @@ class TelegramBotApp:
             await update.message.reply_text(f"处理失败: {exc}")
             return
 
-        message = f"处理完成，已将笔记保存到 GitHub 目录中的文件: {result.file_path}"
+        message = f"✅ 处理完成\n\n📁 文件: `{result.file_path}`"
         if result.commit_hash:
-            message += f"\nCommit: `{result.commit_hash}`"
-        await update.message.reply_text(message)
+            message += f"\n🔖 Commit: `{result.commit_hash[:7]}`"
+        if result.github_url:
+            message += f"\n\n📂 [GitHub 查看]({result.github_url})"
+        if result.telegraph_url:
+            message += f"\n📖 [Telegraph 预览]({result.telegraph_url})"
+        await update.message.reply_text(message, parse_mode="Markdown", disable_web_page_preview=True)
 
 
 async def heartbeat_job(context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG001
