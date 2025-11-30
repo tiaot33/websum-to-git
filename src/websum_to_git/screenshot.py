@@ -30,8 +30,7 @@ def capture_screenshot(url: str, timeout: int = 15, full_page: bool = True) -> b
 
         with Camoufox(
             geoip=True,
-            config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5, "showcursor": True},
-            headless="virtual",
+            config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5},
         ) as browser:
             page = browser.new_page()
 

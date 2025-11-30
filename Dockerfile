@@ -27,7 +27,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     HOME="/app"
 
-# 安装 Camoufox 运行时依赖 + Xvfb（虚拟显示）+ 清理缓存
+# 安装 Camoufox 运行时依赖 + Xvfb（虚拟显示）+ Mesa 软件渲染 + 清理缓存
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     libgtk-3-0 \
@@ -35,6 +35,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     xauth \
     ca-certificates \
+    # Mesa 软件渲染支持（解决 glxtest 失败）
+    libgl1-mesa-dri \
+    libgl1-mesa-glx \
+    libegl1-mesa \
+    # DBus（解决 DBus proxy 警告）
+    dbus \
     && rm -rf /var/lib/apt/lists/*
 
 # 预创建 X11 套接字目录（需要 root 权限）
