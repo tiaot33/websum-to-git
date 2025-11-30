@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import anthropic
@@ -8,6 +9,8 @@ from google.genai import types
 from openai import OpenAI
 
 from .config import LLMConfig
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -38,16 +41,27 @@ class LLMClient:
         - system_prompt 用于提供系统级指令（可为空）
         - user_content 为用户输入内容（必填）
         """
-        if self._provider == "openai":
-            return self._generate_with_openai(system_prompt, user_content)
-        if self._provider == "openai-response":
-            return self._generate_with_openai_response(system_prompt, user_content)
-        if self._provider == "anthropic":
-            return self._generate_with_anthropic(system_prompt, user_content)
-        if self._provider == "gemini":
-            return self._generate_with_gemini(system_prompt, user_content)
+        logger.info(
+            "LLM 生成请求, provider: %s, model: %s, system_prompt 长度: %d, user_content 长度: %d",
+            self._provider,
+            self._config.model,
+            len(system_prompt) if system_prompt else 0,
+            len(user_content),
+        )
 
-        raise RuntimeError(f"未知的 LLM provider: {self._provider}")
+        if self._provider == "openai":
+            result = self._generate_with_openai(system_prompt, user_content)
+        elif self._provider == "openai-response":
+            result = self._generate_with_openai_response(system_prompt, user_content)
+        elif self._provider == "anthropic":
+            result = self._generate_with_anthropic(system_prompt, user_content)
+        elif self._provider == "gemini":
+            result = self._generate_with_gemini(system_prompt, user_content)
+        else:
+            raise RuntimeError(f"未知的 LLM provider: {self._provider}")
+
+        logger.info("LLM 生成完成, 响应长度: %d", len(result))
+        return result
 
     def _generate_with_openai(self, system_prompt: str | None, user_content: str) -> str:
         # OpenAI / OpenAI 兼容 API，使用官方 SDK 的 chat.completions

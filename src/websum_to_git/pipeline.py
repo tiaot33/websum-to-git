@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,8 +12,10 @@ from .html_processor import PageContent, fetch_html, fetch_html_headless, parse_
 from .llm_client import LLMClient
 from .markdown_chunker import estimate_token_length, split_markdown_into_chunks
 
+logger = logging.getLogger(__name__)
+
 # 单次 LLM 请求最大输入 token 数
-_MAX_INPUT_TOKENS = 10000
+_MAX_INPUT_TOKENS = 32000
 
 # 提示词文件路径
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -48,6 +51,10 @@ class HtmlToObsidianPipeline:
         self._publisher = GitHubPublisher(config.github)
 
     def process_url(self, url: str) -> PublishResult:
+        logger.info("开始处理 URL: %s", url)
+
+        # 步骤 1: 抓取网页
+        logger.info("步骤 1/4: 抓取网页内容 (模式: %s)", self._config.http.fetch_mode)
         if self._config.http.fetch_mode == "headless":
             html, final_url = fetch_html_headless(url)
         else:
@@ -55,29 +62,48 @@ class HtmlToObsidianPipeline:
                 url,
                 verify=self._config.http.verify_ssl,
             )
+        logger.info("抓取完成, HTML 长度: %d, 最终 URL: %s", len(html), final_url)
+
+        # 步骤 2: 解析页面
+        logger.info("步骤 2/4: 解析页面内容")
         page = parse_page(url=url, html=html, final_url=final_url)
+        logger.info("解析完成, 标题: %s, Markdown 长度: %d", page.title, len(page.markdown))
 
+        # 步骤 3: LLM 总结
+        logger.info("步骤 3/4: 调用 LLM 生成摘要")
         summary_result = self._summarize_page(page)
+        logger.info("摘要生成完成, AI 标题: %s", summary_result.ai_title)
 
+        # 步骤 4: 构建 Markdown 并发布
+        logger.info("步骤 4/4: 构建 Markdown 并发布到 GitHub")
         full_markdown = self._build_markdown(
             page=page,
             summary_result=summary_result,
         )
+        logger.info("Markdown 构建完成, 总长度: %d", len(full_markdown))
 
-        return self._publisher.publish_markdown(
+        result = self._publisher.publish_markdown(
             content=full_markdown,
             source=page.final_url,
             title=summary_result.ai_title,
         )
+        logger.info("发布成功, 文件路径: %s, commit: %s", result.file_path, result.commit_hash)
+
+        return result
 
     def _summarize_page(self, page: PageContent) -> SummaryResult:
         """将网页正文内容转换为适合 Obsidian 的 Markdown 摘要。"""
         text = page.markdown.strip()
         if not text:
+            logger.warning("页面未提取到正文内容, 使用原始标题")
             return SummaryResult(ai_title=page.title, content="（页面中未提取到正文内容）")
 
+        token_count = estimate_token_length(text)
+        logger.info("正文 token 估算: %d (阈值: %d)", token_count, _MAX_INPUT_TOKENS)
+
         # 内容较短时，直接一次性总结
-        if estimate_token_length(text) <= _MAX_INPUT_TOKENS:
+        if token_count <= _MAX_INPUT_TOKENS:
+            logger.info("内容较短, 执行单次总结")
             user_content = (
                 f"网页标题: {page.title}\n网页地址: {page.final_url}\n\n网页正文内容（已去除脚本等噪音标签）:\n{text}\n"
             )
@@ -89,10 +115,12 @@ class HtmlToObsidianPipeline:
 
         # 内容较长时，按 Markdown 块结构分 chunk，每个 chunk 独立生成完整总结后拼接
         chunks = split_markdown_into_chunks(text, _MAX_INPUT_TOKENS)
+        total = len(chunks)
+        logger.info("内容较长, 分割为 %d 个片段进行总结", total)
 
         chunk_results: list[SummaryResult] = []
-        total = len(chunks)
         for idx, chunk in enumerate(chunks, start=1):
+            logger.info("处理片段 %d/%d, 长度: %d", idx, total, len(chunk))
             chunk_user_content = (
                 f"网页标题: {page.title}\n"
                 f"网页地址: {page.final_url}\n"
@@ -107,7 +135,10 @@ class HtmlToObsidianPipeline:
                 chunk_results.append(_parse_summary_result(raw_output))
 
         if not chunk_results:
+            logger.warning("所有片段总结失败, 返回默认结果")
             return SummaryResult(ai_title=page.title, content="（无法生成总结）")
+
+        logger.info("成功总结 %d 个片段", len(chunk_results))
 
         # 使用第一个 chunk 的标题作为整体标题
         ai_title = chunk_results[0].ai_title
@@ -125,6 +156,7 @@ class HtmlToObsidianPipeline:
 
     def _generate_tags(self, title: str, summary_content: str) -> list[str]:
         """调用 AI 生成文章标签。"""
+        logger.info("生成标签, 标题: %s", title)
         user_content = f"文章标题: {title}\n\n文章摘要:\n{summary_content[:2000]}\n"
         raw_output = self._fast_llm.generate(
             system_prompt=_load_prompt("generate_tags"),
@@ -132,6 +164,7 @@ class HtmlToObsidianPipeline:
         ).strip()
         # 解析输出为标签列表，每行一个标签，并去除标签内的空格
         tags = [line.strip().replace(" ", "") for line in raw_output.split("\n") if line.strip()]
+        logger.info("生成标签完成, 数量: %d, 标签: %s", len(tags), tags)
         return tags  # 最多返回 10 个标签
 
     def _is_chinese_text(self, text: str) -> bool:
@@ -150,8 +183,12 @@ class HtmlToObsidianPipeline:
 
     def _translate_to_chinese(self, text: str) -> str:
         """将文本翻译为中文。"""
+        token_count = estimate_token_length(text)
+        logger.info("翻译文本, 长度: %d, token 估算: %d", len(text), token_count)
+
         # 对于超长文本，分块翻译
-        if estimate_token_length(text) <= _MAX_INPUT_TOKENS:
+        if token_count <= _MAX_INPUT_TOKENS:
+            logger.info("文本较短, 执行单次翻译")
             return self._fast_llm.generate(
                 system_prompt=_load_prompt("translate_to_chinese"),
                 user_content=text,
@@ -159,17 +196,23 @@ class HtmlToObsidianPipeline:
 
         # 分块翻译
         chunks = split_markdown_into_chunks(text, _MAX_INPUT_TOKENS)
+        logger.info("文本较长, 分割为 %d 个片段进行翻译", len(chunks))
+
         translated_parts: list[str] = []
-        for chunk in chunks:
+        for idx, chunk in enumerate(chunks, start=1):
+            logger.info("翻译片段 %d/%d, 长度: %d", idx, len(chunks), len(chunk))
             translated = self._fast_llm.generate(
                 system_prompt=_load_prompt("translate_to_chinese"),
                 user_content=chunk,
             ).strip()
             if translated:
                 translated_parts.append(translated)
+
+        logger.info("翻译完成, 成功片段数: %d", len(translated_parts))
         return "\n\n".join(translated_parts)
 
     def _build_markdown(self, *, page: PageContent, summary_result: SummaryResult) -> str:
+        logger.info("构建最终 Markdown 文档")
         now = datetime.now().strftime("%Y.%m.%d. %H:%M")
 
         # 生成标签
@@ -197,17 +240,20 @@ class HtmlToObsidianPipeline:
         # 附加页面原文
         original_markdown = page.markdown.strip()
         is_chinese = self._is_chinese_text(original_markdown)
+        logger.info("原文语言检测: %s", "中文" if is_chinese else "非中文")
 
         body_lines.append("---")
         body_lines.append("")
 
         if is_chinese:
             # 原文是中文，直接输出
+            logger.info("原文为中文, 直接附加")
             body_lines.append("## 原文")
             body_lines.append("")
             body_lines.append(original_markdown)
         else:
             # 原文非中文，先输出翻译，再保留原文
+            logger.info("原文非中文, 执行翻译")
             translated = self._translate_to_chinese(original_markdown)
             body_lines.append("## 原文（中文翻译）")
             body_lines.append("")
@@ -221,4 +267,5 @@ class HtmlToObsidianPipeline:
 
         body_lines.append("")
 
+        logger.info("Markdown 文档构建完成")
         return "\n".join(front_matter_lines + body_lines)

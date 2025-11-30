@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from dataclasses import dataclass
 from urllib.parse import quote, urljoin, urlparse
 
@@ -8,6 +9,8 @@ import requests
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 from readability import Document
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_HEADERS = {
     # 模拟常见桌面浏览器，降低被简单反爬和 UA 黑名单拦截的概率
@@ -59,6 +62,7 @@ def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> tuple[str, s
     Returns:
         (html, final_url) 元组
     """
+    logger.info("使用 requests 抓取 URL: %s (timeout=%d, verify=%s)", url, timeout, verify)
     resp = requests.get(
         url,
         timeout=timeout,
@@ -66,6 +70,12 @@ def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> tuple[str, s
         headers=DEFAULT_HEADERS,
     )
     resp.raise_for_status()
+    logger.info(
+        "requests 抓取完成, 状态码: %d, 最终 URL: %s, 内容长度: %d",
+        resp.status_code,
+        resp.url,
+        len(resp.text),
+    )
     return resp.text, resp.url
 
 
@@ -74,6 +84,7 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
 
     Camoufox 是基于 Firefox 的反指纹浏览器，内置类人鼠标移动等特性。
     """
+    logger.info("使用 Camoufox (headless) 抓取 URL: %s (timeout=%d)", url, timeout)
 
     try:
         from camoufox.sync_api import Camoufox
@@ -85,14 +96,16 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
     try:
+        logger.info("启动 Camoufox 浏览器实例")
         with Camoufox(
             geoip=True,
             config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5},
-            headless="virtual",
+            # headless="virtual",
         ) as browser:
             page = browser.new_page()
 
             try:
+                logger.info("导航至目标页面")
                 response = page.goto(
                     url,
                     timeout=max(timeout, 1) * 1000,
@@ -104,12 +117,14 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
                     status_text = getattr(response, "status_text", "") or ""
                     raise HeadlessFetchError(f"Headless 抓取失败: HTTP {response.status} {status_text}".strip())
 
+                logger.info("等待页面加载完成")
                 # 继续等待页面完成主要资源加载（仅忽略超时异常）
                 with contextlib.suppress(PlaywrightTimeoutError):
                     page.wait_for_load_state("load", timeout=8000)
                 with contextlib.suppress(PlaywrightTimeoutError):
                     page.wait_for_load_state("networkidle", timeout=8000)
 
+                logger.info("执行页面滚动以触发懒加载")
                 # 以较慢速度滚动至页面底部，触发懒加载图片/内容
                 # 返回 Promise 确保 evaluate() 等待滚动完成；设置最大滚动次数防止无限滚动
                 page.evaluate(
@@ -148,6 +163,7 @@ def fetch_html_headless(url: str, timeout: int = 15) -> tuple[str, str]:
 
                 html = page.content()
                 final_url = page.url
+                logger.info("Headless 抓取完成, 最终 URL: %s, HTML 长度: %d", final_url, len(html))
             except HeadlessFetchError:
                 raise
             except Exception as exc:
@@ -233,15 +249,21 @@ def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent
         PageContent 对象，包含提取的内容和原始 HTML
     """
     final_url = final_url or url
+    logger.info("开始解析页面, URL: %s, HTML 长度: %d", final_url, len(html))
 
     # 使用 readability-lxml 提取正文
+    logger.info("使用 Readability 提取正文")
     doc = Document(html)
     title = doc.title() or ""
     article_html = doc.summary()
+    logger.info("Readability 提取完成, 标题: %s, 文章 HTML 长度: %d", title, len(article_html))
+
     # 将相对链接转换为绝对链接，确保 Markdown 中的链接可正确访问
     article_html = _make_links_absolute(article_html, final_url)
     # 转换为 Markdown
+    logger.info("将 HTML 转换为 Markdown")
     markdown = _html_to_markdown(article_html)
+    logger.info("Markdown 转换完成, 长度: %d", len(markdown))
 
     # 解析文章 HTML 获取纯文本和图片
     article_soup = BeautifulSoup(article_html, "html.parser")
@@ -250,6 +272,7 @@ def parse_page(url: str, html: str, final_url: str | None = None) -> PageContent
         tag.decompose()
     # 提取纯文本（用于 LLM 摘要）
     text = article_soup.get_text(separator="\n", strip=True)
+    logger.info("页面解析完成, 纯文本长度: %d", len(text))
 
     return PageContent(
         url=url,

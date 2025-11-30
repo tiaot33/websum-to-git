@@ -9,3 +9,7 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     command: ["xvfb-run", "-a", "python", "main.py", "--config", "/app/config.yaml"]
+    deploy:
+      resources:
+        limits:
+          memory: 800m
