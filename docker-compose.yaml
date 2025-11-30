@@ -3,8 +3,9 @@ services:
     build: .
     restart: unless-stopped
     container_name: websum-to-git
+    shm_size: 512m
     environment:
       - TZ=Asia/Shanghai
     volumes:
       - ./config.yaml:/app/config.yaml:ro
-    # command: ["xvfb-run", "-a", "python", "main.py", "--config", "/app/config.yaml"]
+    command: ["xvfb-run", "-a", "python", "main.py", "--config", "/app/config.yaml"]
