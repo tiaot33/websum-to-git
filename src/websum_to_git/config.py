@@ -13,6 +13,8 @@ class LLMConfig:
     base_url: str | None = None
     # 是否启用模型的 thinking/reasoning 功能（目前仅 Gemini 支持）
     enable_thinking: bool = True
+    # 单次 LLM 请求最大输入 token 数
+    max_input_tokens: int = 10000
 
 
 @dataclass
@@ -63,6 +65,8 @@ def _build_llm_config(llm_raw: dict[str, Any]) -> LLMConfig:
 
     # enable_thinking 默认为 True，配置中可显式设为 false 关闭
     enable_thinking = llm_raw.get("enable_thinking", True)
+    # max_input_tokens 默认为 10000
+    max_input_tokens = llm_raw.get("max_input_tokens", 10000)
 
     return LLMConfig(
         provider=provider,
@@ -70,6 +74,7 @@ def _build_llm_config(llm_raw: dict[str, Any]) -> LLMConfig:
         model=model,
         base_url=base_url,
         enable_thinking=bool(enable_thinking),
+        max_input_tokens=int(max_input_tokens),
     )
 
 

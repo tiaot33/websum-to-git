@@ -12,6 +12,8 @@ llm:
   api_key: "YOUR_LLM_API_KEY"
   model: "gpt-4.1-mini"
   enable_thinking: true
+  # 单次 LLM 请求最大输入 token 数，根据模型上下文窗口调整
+  max_input_tokens: 10000
 
 llm_fast:
   # 用于标签和翻译的快速模型，可单独配置到不同端口/服务
@@ -20,6 +22,7 @@ llm_fast:
   api_key: "YOUR_FAST_LLM_API_KEY"
   model: "gpt-4o-mini"
   enable_thinking: false
+  max_input_tokens: 8000
 
 github:
   repo: "owner/repo"           # 例如: yourname/your-notes-repo

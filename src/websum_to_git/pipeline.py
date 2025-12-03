@@ -15,9 +15,6 @@ from .telegraph_client import TelegraphClient
 
 logger = logging.getLogger(__name__)
 
-# 单次 LLM 请求最大输入 token 数
-_MAX_INPUT_TOKENS = 10000
-
 # 提示词文件路径
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
@@ -128,11 +125,12 @@ class HtmlToObsidianPipeline:
             logger.warning("页面未提取到正文内容, 使用原始标题")
             return SummaryResult(ai_title=page.title, content="（页面中未提取到正文内容）")
 
+        max_tokens = self._config.llm.max_input_tokens
         token_count = estimate_token_length(text)
-        logger.info("正文 token 估算: %d (阈值: %d)", token_count, _MAX_INPUT_TOKENS)
+        logger.info("正文 token 估算: %d (阈值: %d)", token_count, max_tokens)
 
         # 内容较短时，直接一次性总结
-        if token_count <= _MAX_INPUT_TOKENS:
+        if token_count <= max_tokens:
             logger.info("内容较短, 执行单次总结")
             user_content = (
                 f"网页标题: {page.title}\n网页地址: {page.final_url}\n\n网页正文内容（已去除脚本等噪音标签）:\n{text}\n"
@@ -144,7 +142,7 @@ class HtmlToObsidianPipeline:
             return _parse_summary_result(raw_output)
 
         # 内容较长时，按 Markdown 块结构分 chunk，每个 chunk 独立生成完整总结后拼接
-        chunks = split_markdown_into_chunks(text, _MAX_INPUT_TOKENS)
+        chunks = split_markdown_into_chunks(text, max_tokens)
         total = len(chunks)
         logger.info("内容较长, 分割为 %d 个片段进行总结", total)
 
@@ -213,11 +211,17 @@ class HtmlToObsidianPipeline:
 
     def _translate_to_chinese(self, text: str) -> str:
         """将文本翻译为中文。"""
+        # 翻译使用 fast_llm 的配置，如果未配置则使用主 llm 的配置
+        max_tokens = (
+            self._config.fast_llm.max_input_tokens
+            if self._config.fast_llm
+            else self._config.llm.max_input_tokens
+        )
         token_count = estimate_token_length(text)
         logger.info("翻译文本, 长度: %d, token 估算: %d", len(text), token_count)
 
         # 对于超长文本，分块翻译
-        if token_count <= _MAX_INPUT_TOKENS:
+        if token_count <= max_tokens:
             logger.info("文本较短, 执行单次翻译")
             return self._fast_llm.generate(
                 system_prompt=_load_prompt("translate_to_chinese"),
@@ -225,7 +229,7 @@ class HtmlToObsidianPipeline:
             ).strip()
 
         # 分块翻译
-        chunks = split_markdown_into_chunks(text, _MAX_INPUT_TOKENS)
+        chunks = split_markdown_into_chunks(text, max_tokens)
         logger.info("文本较长, 分割为 %d 个片段进行翻译", len(chunks))
 
         translated_parts: list[str] = []
