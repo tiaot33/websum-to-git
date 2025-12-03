@@ -22,7 +22,11 @@ class LLMClient:
 
         # 延迟导入对应 SDK，避免不必要依赖
         if provider in ("openai", "openai-response"):
-            self._client = OpenAI(api_key=config.api_key, base_url=config.base_url)
+            self._client = OpenAI(
+                api_key=config.api_key,
+                base_url=config.base_url,
+                timeout=600.0,  # 10 分钟超时，适应长文本生成
+            )
         elif provider == "anthropic":
             client_kwargs: dict[str, Any] = {"api_key": config.api_key}
             if config.base_url:
