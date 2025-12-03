@@ -18,7 +18,7 @@ dependencies = [
     "readability-lxml",
     "markdownify",
     "tiktoken",
-    "camoufox[geoip]>=0.4.11",
+    "camoufox[geoip]",
 ]
 
 [project.scripts]
@@ -61,3 +61,6 @@ select = [
     "SIM", # flake8-simplify
     "I",   # isort
 ]
+
+[tool.uv.sources]
+camoufox = { git = "https://github.com/coryking/camoufox.git", subdirectory = "pythonlib", rev = "v142.0.1-fork.27" }
