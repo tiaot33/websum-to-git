@@ -5,6 +5,13 @@ FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
+# 安装构建依赖（git 用于从 Git 仓库安装 camoufox）
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 # 安装 UV（快速的 Python 包管理器）
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
