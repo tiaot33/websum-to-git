@@ -77,7 +77,7 @@ class LLMClient:
                     "thinking": {
                         "type": "enabled",
                     },
-                    "reasoning_effort": {"high"},
+                    "reasoning_effort": "high",
                 }
             }
         resp = self._client.chat.completions.create(
