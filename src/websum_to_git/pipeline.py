@@ -282,20 +282,20 @@ class HtmlToObsidianPipeline:
         if is_chinese:
             # 原文是中文，直接输出
             logger.info("原文为中文, 直接附加")
-            body_lines.append("## 原文")
+            body_lines.append("# 原文")
             body_lines.append("")
             body_lines.append(original_markdown)
         else:
             # 原文非中文，先输出翻译，再保留原文
             logger.info("原文非中文, 执行翻译")
             translated = self._translate_to_chinese(original_markdown)
-            body_lines.append("## 原文（中文翻译）")
+            body_lines.append("# 原文（中文翻译）")
             body_lines.append("")
             body_lines.append(translated)
             body_lines.append("")
             body_lines.append("---")
             body_lines.append("")
-            body_lines.append("## 原文（原语言）")
+            body_lines.append("# 原文（原语言）")
             body_lines.append("")
             body_lines.append(original_markdown)
 
