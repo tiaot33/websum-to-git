@@ -25,7 +25,7 @@ class LLMClient:
             self._client = OpenAI(
                 api_key=config.api_key,
                 base_url=config.base_url,
-                timeout=600.0,  # 10 分钟超时，适应长文本生成
+                timeout=1800,  # 30 分钟超时，适应长文本生成
             )
         elif provider == "anthropic":
             client_kwargs: dict[str, Any] = {"api_key": config.api_key}
