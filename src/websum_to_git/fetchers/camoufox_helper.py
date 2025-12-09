@@ -90,18 +90,13 @@ def _auto_scroll(
             scrollLoop();
         });
     }
-    """
-    
+    """  # noqa: W293
+
     try:
         # 传递参数字典给 evaluate
-        page.evaluate(js_script, {
-            "step": step,
-            "maxIterations": max_iterations,
-            "baseDelay": base_delay_ms
-        })
+        page.evaluate(js_script, {"step": step, "maxIterations": max_iterations, "baseDelay": base_delay_ms})
     except Exception as e:
         logger.warning("页面滚动执行出错 (非致命): %s", e)
-
 
 
 def fetch_with_camoufox(
