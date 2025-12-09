@@ -79,25 +79,25 @@ def fetch_page(url: str, config: AppConfig) -> PageContent:
     result = fetch_headless(url, config)
 
     # 3. 检查内容长度，如果过短则尝试 Firecrawl 补充抓取
-    if len(result.markdown) < MIN_CONTENT_FOR_RETRY and config.firecrawl:
+    if len(result.markdown.strip()) < MIN_CONTENT_FOR_RETRY and config.firecrawl:
         logger.warning(
             "Headless 抓取内容过短 (%d 字符 < %d)，尝试使用 Firecrawl 重新抓取",
-            len(result.markdown),
+            len(result.markdown.strip()),
             MIN_CONTENT_FOR_RETRY,
         )
         try:
             firecrawl_result = fetch_firecrawl(url, config)
             # 只有当 Firecrawl 结果达到最小长度阈值时才使用
-            if len(firecrawl_result.markdown) >= MIN_CONTENT_FOR_RETRY:
+            if len(firecrawl_result.markdown.strip()) >= MIN_CONTENT_FOR_RETRY:
                 logger.info(
                     "Firecrawl 抓取成功, 内容达到阈值 (%d 字符 >= %d)",
-                    len(firecrawl_result.markdown),
+                    len(firecrawl_result.markdown.strip()),
                     MIN_CONTENT_FOR_RETRY,
                 )
                 return firecrawl_result
             logger.info(
                 "Firecrawl 抓取内容仍过短 (%d 字符 < %d)，使用原结果",
-                len(firecrawl_result.markdown),
+                len(firecrawl_result.markdown.strip()),
                 MIN_CONTENT_FOR_RETRY,
             )
         except Exception as exc:
