@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,7 +38,6 @@ class FirecrawlConfig:
     base_url: str | None = None
 
 
-
 @dataclass
 class HttpConfig:
     # 控制抓取网页时是否校验证书；正常情况下应保持为 True
@@ -51,7 +52,6 @@ class AppConfig:
     http: HttpConfig
     fast_llm: LLMConfig | None = None
     firecrawl: FirecrawlConfig | None = None
-
 
 
 def _require(mapping: dict[str, Any], key: str) -> Any:
@@ -100,7 +100,6 @@ def load_config(path: str | Path) -> AppConfig:
     firecrawl_raw = raw.get("firecrawl")
     http_raw = raw.get("http", {}) or {}
 
-
     telegram = TelegramConfig(bot_token=_require(telegram_raw, "bot_token"))
 
     llm = _build_llm_config(llm_raw)
@@ -120,7 +119,6 @@ def load_config(path: str | Path) -> AppConfig:
             base_url=firecrawl_raw.get("base_url"),
         )
 
-
     http = HttpConfig(
         verify_ssl=http_raw.get("verify_ssl", True),
     )
@@ -133,4 +131,3 @@ def load_config(path: str | Path) -> AppConfig:
         fast_llm=fast_llm,
         firecrawl=firecrawl,
     )
-

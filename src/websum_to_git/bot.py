@@ -4,10 +4,9 @@ import asyncio
 import logging
 import re
 import time
+import uuid
 from io import BytesIO
 from pathlib import Path
-
-import uuid
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Message, Update
 from telegram.ext import (
@@ -139,7 +138,7 @@ class TelegramBotApp:
             message += f"\n\n📂 [GitHub 查看]({result.github_url})"
         if result.telegraph_url:
             message += f"\n📖 [Telegraph 预览]({result.telegraph_url})"
-        
+
         # 添加删除按钮
         keyboard = None
         if result.file_path and result.commit_hash:
@@ -147,18 +146,13 @@ class TelegramBotApp:
             # 存储 file_path 到 bot_data，以便回调时使用
             # key 格式: del:{request_id}
             context.bot_data[f"del:{request_id}"] = result.file_path
-            
-            keyboard = [
-                [InlineKeyboardButton("🗑️ 删除本次提交", callback_data=f"del:{request_id}")]
-            ]
-            
+
+            keyboard = [[InlineKeyboardButton("🗑️ 删除本次提交", callback_data=f"del:{request_id}")]]
+
         reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-        
+
         await update.message.reply_text(
-            message, 
-            parse_mode="Markdown", 
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
+            message, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=reply_markup
         )
 
     async def handle_delete_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -171,14 +165,14 @@ class TelegramBotApp:
         if not query.message or not isinstance(query.message, Message):
             # 如果消息无法访问（例如已被删除），则不处理
             return
-        
+
         data = query.data
         if not data or not data.startswith("del:"):
             return
 
         request_id = data.split(":", 1)[1]
         file_path = context.bot_data.get(f"del:{request_id}")
-        
+
         if not file_path:
             # 此时 query.message 既然已确认是 Message，就可以放心访问 text
             await query.edit_message_text(text=f"{query.message.text}\n\n⚠️ 无法找到文件记录，可能已被清理。")
@@ -187,10 +181,10 @@ class TelegramBotApp:
         try:
             # 执行删除
             self._pipeline.delete_file(file_path)
-            
+
             # 清理 bot_data
             del context.bot_data[f"del:{request_id}"]
-            
+
             # 更新消息文本
             # 移除按钮，并追加已删除提示
             original_text = query.message.text_markdown
@@ -200,7 +194,7 @@ class TelegramBotApp:
                 await query.edit_message_text(text=new_text, parse_mode="Markdown", disable_web_page_preview=True)
             else:
                 await query.edit_message_text(text="🗑️ 本次提交已删除")
-                
+
         except Exception as exc:
             logger.exception("删除文件失败: %s", file_path)
             await query.edit_message_text(text=f"{query.message.text}\n\n❌ 删除失败: {exc}")

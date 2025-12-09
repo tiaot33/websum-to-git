@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from websum_to_git.config import AppConfig
@@ -16,8 +17,16 @@ class FetchError(RuntimeError):
     """抓取过程中出现的异常。"""
 
 
-@dataclass
-class PageContent:
+class ArticleData(BaseModel):
+    """从 HTML 提取的文章数据。"""
+
+    title: str = ""
+    article_html: str = ""
+    markdown: str = ""
+    text: str = ""
+
+
+class PageContent(BaseModel):
     """网页内容数据结构。
 
     Attributes:
@@ -30,6 +39,8 @@ class PageContent:
         article_html: 提取后的文章 HTML（Readability 处理后）
     """
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     url: str
     final_url: str
     title: str
@@ -37,6 +48,14 @@ class PageContent:
     markdown: str
     raw_html: str
     article_html: str
+
+
+class HeadlessConfig(BaseModel):
+    """Headless 浏览器抓取配置。"""
+
+    timeout: int | None = Field(default=None, description="超时时间(秒)")
+    wait_selector: str | None = Field(default=None, description="等待出现的 CSS 选择器")
+    scroll: bool = Field(default=True, description="是否执行滚动操作")
 
 
 def get_common_config(config: AppConfig) -> tuple[int, bool]:

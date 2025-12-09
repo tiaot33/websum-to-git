@@ -78,6 +78,9 @@
 - 其后使用基于 `requests` 的轻量抓取器处理大多数页面
 - 如安装了 Camoufox，将在必要时使用 Headless 浏览器作为兜底抓取方案
 
+关于如何为特定网站添加自定义 Headless 抓取策略（例如处理复杂的动态网页），请参考 [Headless 策略指南](docs/headless_strategies.md)。
+
+
 如需启用基于 Camoufox 的 Headless 抓取，请先安装依赖：
 
 ```bash

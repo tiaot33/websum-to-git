@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 from readability import Document
 
+from .structs import ArticleData
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,7 +59,7 @@ def make_links_absolute(html: str, base_url: str) -> str:
     return str(soup)
 
 
-def extract_article(html: str, base_url: str) -> tuple[str, str, str, str]:
+def extract_article(html: str, base_url: str) -> ArticleData:
     """使用 Readability 从 HTML 提取文章内容。
 
     Args:
@@ -65,7 +67,7 @@ def extract_article(html: str, base_url: str) -> tuple[str, str, str, str]:
         base_url: 用于解析相对链接的基础 URL
 
     Returns:
-        (title, article_html, markdown, text) 元组
+        ArticleData 对象
     """
     logger.info("使用 Readability 提取正文, HTML 长度: %d", len(html))
 
@@ -88,4 +90,4 @@ def extract_article(html: str, base_url: str) -> tuple[str, str, str, str]:
     text = article_soup.get_text(separator="\n", strip=True)
     logger.info("纯文本提取完成, 长度: %d", len(text))
 
-    return title, article_html, markdown, text
+    return ArticleData(title=title, article_html=article_html, markdown=markdown, text=text)
