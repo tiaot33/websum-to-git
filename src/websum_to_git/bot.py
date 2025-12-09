@@ -18,7 +18,7 @@ from telegram.ext import (
 )
 
 from .config import AppConfig, load_config
-from .html_processor import HeadlessFetchError
+from .fetchers import FetchError
 from .pipeline import HtmlToObsidianPipeline
 from .screenshot import capture_screenshot
 
@@ -87,7 +87,7 @@ class TelegramBotApp:
 
         try:
             image_bytes = await asyncio.to_thread(capture_screenshot, url)
-        except HeadlessFetchError as exc:
+        except FetchError as exc:
             logger.exception("截图失败（Headless）: %s", url)
             await update.message.reply_text(f"截图失败（Headless 抓取异常）: {exc}")
             return

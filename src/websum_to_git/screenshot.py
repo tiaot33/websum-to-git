@@ -4,7 +4,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from .html_processor import HeadlessFetchError
+from .fetchers import FetchError
 
 
 def capture_screenshot(url: str, timeout: int = 15, full_page: bool = True) -> bytes:
@@ -18,7 +18,7 @@ def capture_screenshot(url: str, timeout: int = 15, full_page: bool = True) -> b
     try:
         from camoufox.sync_api import Camoufox
     except ModuleNotFoundError as exc:  # pragma: no cover - 运行期缺依赖
-        raise HeadlessFetchError(
+        raise FetchError(
             "Camoufox 未安装，请执行 `pip install -U camoufox[geoip]` 并运行 `python -m camoufox fetch`"
         ) from exc
 
@@ -56,19 +56,19 @@ def capture_screenshot(url: str, timeout: int = 15, full_page: bool = True) -> b
 
                 if response and response.status >= 400:
                     status_text = getattr(response, "status_text", "") or ""
-                    raise HeadlessFetchError(f"Headless 截图失败: HTTP {response.status} {status_text}".strip())
+                    raise FetchError(f"Headless 截图失败: HTTP {response.status} {status_text}".strip())
 
                 page.screenshot(path=str(screenshot_path), full_page=full_page)
-            except HeadlessFetchError:
+            except FetchError:
                 raise
             except Exception as exc:
-                raise HeadlessFetchError(f"Headless 截图过程中页面加载失败: {url}") from exc
+                raise FetchError(f"Headless 截图过程中页面加载失败: {url}") from exc
 
         data = screenshot_path.read_bytes()
-    except HeadlessFetchError:
+    except FetchError:
         raise
     except Exception as exc:  # pragma: no cover - 多种底层异常
-        raise HeadlessFetchError(f"Headless 截图失败: {url}") from exc
+        raise FetchError(f"Headless 截图失败: {url}") from exc
     finally:
         try:  # noqa: SIM105
             screenshot_path.unlink(missing_ok=True)

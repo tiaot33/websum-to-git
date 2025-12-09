@@ -19,8 +19,6 @@ from typing import TYPE_CHECKING
 
 from .github import fetch_github
 from .headless import fetch_headless
-from .mirror import fetch_mirror
-from .requests_fetcher import fetch_requests
 
 # 重新导出以保持向后兼容
 from .structs import FetchError, PageContent
@@ -79,6 +77,4 @@ __all__ = [
     "FetchError",
     "PageContent",
     "fetch_page",
-    "fetch_mirror",
-    "fetch_requests",
 ]
