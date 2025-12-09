@@ -39,20 +39,35 @@ def fetch_firecrawl(url: str, config: AppConfig) -> PageContent:
         # Use cached data if it's less than 1 hour old (3600000 ms)
         scrape_result = firecrawl.scrape(
             url,
-            formats=['markdown','html'],
-            maxAge=172800000  # 2 days in milliseconds
+            formats=["markdown", "html"],
+            max_age=172800000,  # 2 days in milliseconds
         )
 
-        markdown = scrape_result['markdown']
-        html = scrape_result['html']
-        metadata = scrape_result.get('metadata', {})
+        # Firecrawl 的返回字段在类型上可能为 Optional[str]，这里统一做兜底处理
+        markdown = scrape_result.markdown or ""
+        html = scrape_result.html or ""
+        raw_html = getattr(scrape_result, "raw_html", "") or html or markdown
+
+        # Firecrawl 可能会返回重定向后的 URL, 如果没有则回退为原始 URL
+        metadata = getattr(scrape_result, "metadata", None)
+        final_url = url
+        title = "No Title"
+        if metadata is not None:
+            meta_title = getattr(metadata, "title", None)
+            if meta_title:
+                title = str(meta_title)
+            meta_url = getattr(metadata, "url", None) or getattr(metadata, "canonical_url", None)
+            if meta_url:
+                final_url = str(meta_url)
 
         return PageContent(
             url=url,
-            title=str(metadata.get('title', 'No Title')),
+            final_url=final_url,
+            title=title,
+            text=markdown or html or raw_html,
             markdown=markdown,
-            html=html,
-            text=markdown
+            raw_html=raw_html,
+            article_html=html or raw_html,
         )
 
     except Exception as e:

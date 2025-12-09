@@ -112,4 +112,5 @@ __all__ = [
     "PageContent",
     "capture_screenshot",
     "fetch_page",
+    "fetch_headless",
 ]
