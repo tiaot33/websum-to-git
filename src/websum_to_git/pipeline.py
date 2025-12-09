@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import AppConfig
-from .fetchers import PageContent, fetch_page
+from .fetchers import FetchError, PageContent, fetch_page
 from .github_client import GitHubPublisher
 from .llm_client import LLMClient
 from .markdown_chunker import estimate_token_length, split_markdown_into_chunks
@@ -64,7 +64,12 @@ class HtmlToObsidianPipeline:
 
         # 步骤 1: 抓取并解析网页（自动选择合适的 Fetcher）
         logger.info("步骤 1/4: 抓取并解析网页内容")
-        page = fetch_page(url, self._config)
+        try:
+            page = fetch_page(url, self._config)
+        except FetchError as exc:
+            logger.error("网页抓取失败: %s", exc)
+            raise
+
         logger.info("抓取完成, 标题: %s, Markdown 长度: %d", page.title, len(page.markdown))
 
         # 步骤 2: LLM 总结
@@ -202,9 +207,7 @@ class HtmlToObsidianPipeline:
         """将文本翻译为中文。"""
         # 翻译使用 fast_llm 的配置，如果未配置则使用主 llm 的配置
         max_tokens = (
-            self._config.fast_llm.max_input_tokens
-            if self._config.fast_llm
-            else self._config.llm.max_input_tokens
+            self._config.fast_llm.max_input_tokens if self._config.fast_llm else self._config.llm.max_input_tokens
         )
         token_count = estimate_token_length(text)
         logger.info("翻译文本, 长度: %d, token 估算: %d", len(text), token_count)

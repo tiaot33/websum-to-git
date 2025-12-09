@@ -7,21 +7,26 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, cast
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast
 
-from .base import BaseFetcher, PageContent
 from .camoufox_helper import fetch_with_camoufox
-from .factory import register_fetcher
+from .structs import PageContent, get_common_config
+
+if TYPE_CHECKING:
+    from websum_to_git.config import AppConfig
 
 logger = logging.getLogger(__name__)
 
 
-@register_fetcher(priority=100)
-class TwitterFetcher(BaseFetcher):
+@dataclass
+class TwitterFetcher:
     """Twitter/X.com 推文抓取器。"""
 
-    # 支持的域名
-    SUPPORTED_DOMAINS = ("twitter.com", "x.com", "mobile.twitter.com", "mobile.x.com")
+    config: AppConfig
+
+    def __post_init__(self):
+        self.timeout, self.verify_ssl = get_common_config(self.config)
 
     def fetch(self, url: str) -> PageContent:
         logger.info("使用 TwitterFetcher 抓取: %s", url)
@@ -217,9 +222,7 @@ class TwitterFetcher(BaseFetcher):
             """
         )
 
-    def _build_page_content(
-        self, url: str, final_url: str, html: str, tweet_data: dict
-    ) -> PageContent:
+    def _build_page_content(self, url: str, final_url: str, html: str, tweet_data: dict) -> PageContent:
         """从提取的数据构建 PageContent。"""
         author_name = tweet_data.get("author_name", "Unknown")
         author_handle = tweet_data.get("author_handle", "unknown")
@@ -238,9 +241,7 @@ class TwitterFetcher(BaseFetcher):
             markdown_parts.append("")
 
         # 作者信息
-        markdown_parts.append(
-            f"**作者**: [{author_name}](https://x.com/{author_handle}) (@{author_handle})"
-        )
+        markdown_parts.append(f"**作者**: [{author_name}](https://x.com/{author_handle}) (@{author_handle})")
 
         # 发布时间
         created_at = tweet_data.get("created_at", "")
@@ -318,3 +319,9 @@ class TwitterFetcher(BaseFetcher):
             raw_html=html,
             article_html=article_html,
         )
+
+
+def fetch_twitter(url: str, config: AppConfig) -> PageContent:
+    """Twitter Fetcher 入口函数。"""
+    fetcher = TwitterFetcher(config)
+    return fetcher.fetch(url)

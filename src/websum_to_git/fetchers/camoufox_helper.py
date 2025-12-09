@@ -7,7 +7,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from .base import FetchError
+from .structs import FetchError
 
 logger = logging.getLogger(__name__)
 

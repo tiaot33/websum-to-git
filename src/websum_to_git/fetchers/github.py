@@ -14,52 +14,36 @@ from __future__ import annotations
 import base64
 import logging
 import re
-from typing import Callable, Pattern
-from urllib.parse import urlparse
+from collections.abc import Callable
+from dataclasses import dataclass
+from re import Pattern
+from typing import TYPE_CHECKING
 
 from github import Auth, Github
 from github.GithubException import GithubException
 
-from .base import BaseFetcher, FetchError, PageContent
-from .factory import register_fetcher
+from .structs import FetchError, PageContent, get_common_config
+
+if TYPE_CHECKING:
+    from websum_to_git.config import AppConfig
 
 logger = logging.getLogger(__name__)
 
 
-@register_fetcher(priority=100)
-class GitHubFetcher(BaseFetcher):
-    """GitHub 内容抓取器。
+@dataclass
+class GitHubFetcher:
+    """GitHub 抓取逻辑封装。"""
 
-    使用 PyGithub 获取结构化内容，支持:
-    - 仓库 README
-    - Issue 和 Pull Request
-    - 代码文件
-    - Gist
-    """
+    config: AppConfig
 
-    SUPPORTED_DOMAINS: tuple[str, ...] = ("github.com", "gist.github.com")
+    def __post_init__(self):
+        timeout, verify_ssl = get_common_config(self.config)
+        token = self.config.github.pat
 
-    def __init__(
-        self,
-        timeout: int = 30,
-        verify_ssl: bool = True,
-        token: str | None = None,
-    ) -> None:
-        """初始化 GitHubFetcher。
-
-        Args:
-            timeout: 请求超时时间（秒）
-            verify_ssl: 是否验证 SSL 证书
-            token: GitHub 个人访问令牌（可选，用于提高 API 速率限制）
-        """
-        super().__init__(timeout=timeout, verify_ssl=verify_ssl)
-
-        # 初始化 PyGithub 客户端
         auth = Auth.Token(token) if token else None
         self._github = Github(auth=auth, timeout=timeout, verify=verify_ssl)
 
         # 路由表: (正则, 处理函数)
-        # 注意: 正则顺序很重要，应该从具体到一般
         self._routes: list[tuple[Pattern, Callable[[str, re.Match], PageContent]]] = [
             (
                 re.compile(r"^https?://gist\.github\.com/(?:[^/]+/)?(?P<gist_id>[a-f0-9]+)$"),
@@ -70,7 +54,9 @@ class GitHubFetcher(BaseFetcher):
                 self._handle_file,
             ),
             (
-                re.compile(r"^https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/(?P<type>issues|pull)/(?P<number>\d+)$"),
+                re.compile(
+                    r"^https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/(?P<type>issues|pull)/(?P<number>\d+)$"
+                ),
                 self._handle_issue_or_pr,
             ),
             (
@@ -118,8 +104,6 @@ class GitHubFetcher(BaseFetcher):
     def _handle_repo(self, url: str, match: re.Match) -> PageContent:
         """处理仓库主页 URL。"""
         return self._fetch_repo_readme(url, match.group("owner"), match.group("repo"))
-
-    # 下面的具体实现逻辑保持不变，只是参数可能微调
 
     def _fetch_repo_readme(self, url: str, owner: str, repo: str) -> PageContent:
         """获取仓库 README。"""
@@ -211,7 +195,8 @@ class GitHubFetcher(BaseFetcher):
         markdown_parts = []
         markdown_parts.append(f"# {title}")
         markdown_parts.append("")
-        markdown_parts.append(f"**{item_type}** #{number} in [{owner}/{repo}]({url.split('/issues/')[0].split('/pull/')[0]})")
+        repo_url = url.split("/issues/")[0].split("/pull/")[0]
+        markdown_parts.append(f"**{item_type}** #{number} in [{owner}/{repo}]({repo_url})")
         markdown_parts.append("")
         markdown_parts.append(f"**状态**: {state} | **作者**: @{user} | **创建时间**: {created_at}")
 
@@ -369,3 +354,9 @@ class GitHubFetcher(BaseFetcher):
             raw_html=f"<article><h1>{title}</h1><p>{description}</p></article>",
             article_html=f"<article>{description}</article>",
         )
+
+
+def fetch_github(url: str, config: AppConfig) -> PageContent:
+    """GitHub Fetcher 入口函数。"""
+    fetcher = GitHubFetcher(config)
+    return fetcher.fetch(url)

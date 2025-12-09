@@ -9,10 +9,11 @@ from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 from readability import Document
 
-from websum_to_git.fetchers.base import PageContent
 from websum_to_git.fetchers.html_headers import DEFAULT_HEADERS
+from websum_to_git.fetchers.structs import PageContent
 
 logger = logging.getLogger(__name__)
+
 
 class HeadlessFetchError(RuntimeError):
     """Headless 抓取过程中出现的异常。"""
