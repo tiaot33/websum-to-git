@@ -20,6 +20,7 @@ dependencies = [
     "tiktoken",
     "camoufox[geoip]",
     "PyGithub",
+    "firecrawl-py>=4.10.3",
 ]
 
 [project.scripts]

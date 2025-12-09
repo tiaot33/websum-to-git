@@ -9,3 +9,4 @@ readability-lxml
 markdownify
 tiktoken
 camoufox[geoip]
+firecrawl-py

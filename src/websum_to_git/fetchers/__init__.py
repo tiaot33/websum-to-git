@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 
 from .github import fetch_github
 from .headless import fetch_headless
+from .firecrawl import fetch_firecrawl
+
 
 # 重新导出以保持向后兼容
 from .structs import FetchError, PageContent
@@ -66,11 +68,18 @@ def fetch_page(url: str, config: AppConfig) -> PageContent:
                 # 专用 Fetcher 失败后，继续执行，尝试兜底逻辑
                 break
 
-    # 2. 兜底逻辑：优先尝试 Headless，其次 Requests（或者根据需求调整）
-    # 目前保持简单，统一使用 HeadlessFetcher 作为强力兜底
-    # 也可以引入一个配置项来决定兜底策略
+    # 2. 尝试 Firecrawl (如果配置了 key)
+    # Firecrawl 比 Headless 更快且更稳定，作为通用的优先选择
+    # if config.firecrawl:
+    #     try:
+    #         return fetch_firecrawl(url, config)
+    #     except Exception as exc:
+    #         logger.warning("Firecrawl 抓取失败: %s，尝试降级到 Headless...", exc)
+    #         # 失败后继续向下执行 Headless 逻辑
+
     logger.info("使用默认 HeadlessFetcher 兜底抓取: %s", url)
     return fetch_headless(url, config)
+
 
 
 __all__ = [

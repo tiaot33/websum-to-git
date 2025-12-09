@@ -31,6 +31,13 @@ class TelegramConfig:
 
 
 @dataclass
+class FirecrawlConfig:
+    api_key: str
+    base_url: str | None = None
+
+
+
+@dataclass
 class HttpConfig:
     # 控制抓取网页时是否校验证书；正常情况下应保持为 True
     verify_ssl: bool = True
@@ -43,6 +50,8 @@ class AppConfig:
     github: GitHubConfig
     http: HttpConfig
     fast_llm: LLMConfig | None = None
+    firecrawl: FirecrawlConfig | None = None
+
 
 
 def _require(mapping: dict[str, Any], key: str) -> Any:
@@ -88,7 +97,9 @@ def load_config(path: str | Path) -> AppConfig:
     llm_raw = raw.get("llm", {})
     llm_fast_raw = raw.get("llm_fast")
     github_raw = raw.get("github", {})
+    firecrawl_raw = raw.get("firecrawl")
     http_raw = raw.get("http", {}) or {}
+
 
     telegram = TelegramConfig(bot_token=_require(telegram_raw, "bot_token"))
 
@@ -102,8 +113,24 @@ def load_config(path: str | Path) -> AppConfig:
         pat=_require(github_raw, "pat"),
     )
 
+    firecrawl = None
+    if firecrawl_raw:
+        firecrawl = FirecrawlConfig(
+            api_key=_require(firecrawl_raw, "api_key"),
+            base_url=firecrawl_raw.get("base_url"),
+        )
+
+
     http = HttpConfig(
         verify_ssl=http_raw.get("verify_ssl", True),
     )
 
-    return AppConfig(telegram=telegram, llm=llm, github=github, http=http, fast_llm=fast_llm)
+    return AppConfig(
+        telegram=telegram,
+        llm=llm,
+        github=github,
+        http=http,
+        fast_llm=fast_llm,
+        firecrawl=firecrawl,
+    )
+

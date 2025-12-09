@@ -500,6 +500,24 @@ wheels = [
 ]
 
 [[package]]
+name = "firecrawl-py"
+version = "4.10.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "httpx" },
+    { name = "nest-asyncio" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bf/2f/ac8b99ad5de4e4daa9faf4137adf04aaa170aecc15a18c6e2f3d9a342846/firecrawl_py-4.10.3.tar.gz", hash = "sha256:d4f4a8ccf9bc48621fd0456b7333bbc469871854708c14201c1f39ad56827865", size = 154382 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/c3/80347cb38095c27de6e428954d88f18d762bfe2cb264fdadbac895cdef8d/firecrawl_py-4.10.3-py3-none-any.whl", hash = "sha256:4d55b411c48184022b3b55d1f49e1051c5670830ab414c8a86236693c22c1d2f", size = 192199 },
+]
+
+[[package]]
 name = "frozenlist"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -979,6 +997,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/8f/0a60e501584145588be1af5cc829265701ba3c35a64aec8e07cbb71d39bb/multidict-6.7.0-cp314-cp314t-win_amd64.whl", hash = "sha256:09929cab6fcb68122776d575e03c6cc64ee0b8fca48d17e135474b042ce515cd", size = 53507 },
     { url = "https://files.pythonhosted.org/packages/7f/ae/3148b988a9c6239903e786eac19c889fab607c31d6efa7fb2147e5680f23/multidict-6.7.0-cp314-cp314t-win_arm64.whl", hash = "sha256:cc41db090ed742f32bd2d2c721861725e6109681eddf835d0a82bd3a5c382827", size = 44804 },
     { url = "https://files.pythonhosted.org/packages/b7/da/7d22601b625e241d4f23ef1ebff8acfc60da633c9e7e7922e24d10f592b3/multidict-6.7.0-py3-none-any.whl", hash = "sha256:394fc5c42a333c9ffc3e421a4c85e08580d990e08b99f6bf35b4132114c5dcb3", size = 12317 },
+]
+
+[[package]]
+name = "nest-asyncio"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/f8/51569ac65d696c8ecbee95938f89d4abf00f47d58d48f6fbabfe8f0baefe/nest_asyncio-1.6.0.tar.gz", hash = "sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe", size = 7418 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/c4/c2971a3ba4c6103a3d10c4b0f24f461ddc027f0f09763220cf35ca1401b3/nest_asyncio-1.6.0-py3-none-any.whl", hash = "sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c", size = 5195 },
 ]
 
 [[package]]
@@ -1494,6 +1521,15 @@ wheels = [
 ]
 
 [[package]]
+name = "python-dotenv"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/26/19cadc79a718c5edbec86fd4919a6b6d3f681039a2f6d66d14be94e75fb9/python_dotenv-1.2.1.tar.gz", hash = "sha256:42667e897e16ab0d66954af0e60a9caa94f0fd4ecf3aaf6d2d260eec1aa36ad6", size = 44221 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/1b/a298b06749107c305e1fe0f814c6c74aea7b2f1e10989cb30f544a1b3253/python_dotenv-1.2.1-py3-none-any.whl", hash = "sha256:b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61", size = 21230 },
+]
+
+[[package]]
 name = "python-telegram-bot"
 version = "22.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1891,6 +1927,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "beautifulsoup4" },
     { name = "camoufox", extra = ["geoip"] },
+    { name = "firecrawl-py" },
     { name = "google-genai" },
     { name = "markdownify" },
     { name = "openai" },
@@ -1918,6 +1955,7 @@ requires-dist = [
     { name = "anthropic" },
     { name = "beautifulsoup4" },
     { name = "camoufox", extras = ["geoip"], git = "https://github.com/coryking/camoufox.git?subdirectory=pythonlib&rev=v142.0.1-fork.27" },
+    { name = "firecrawl-py", specifier = ">=4.10.3" },
     { name = "google-genai" },
     { name = "markdownify" },
     { name = "openai" },

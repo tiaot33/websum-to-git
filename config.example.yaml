@@ -30,6 +30,11 @@ github:
   target_dir: "notes/telegram" # 笔记相对仓库根目录的子目录，可留空表示仓库根目录
   pat: "YOUR_GITHUB_PAT"       # 注意不要将真实 PAT 提交到代码仓库
 
+firecrawl:
+  # 可选：配置 Firecrawl API Key 以启用 Firecrawl 抓取 (比 Headless 更快)
+  api_key: "YOUR_FIRECRAWL_API_KEY"
+
+
 http:
   # 可选：是否在抓取网页时校验 HTTPS 证书
   # 正常情况下请保持为 true；如果本地环境证书链异常导致 SSLError，可暂时设为 false（存在安全风险）
