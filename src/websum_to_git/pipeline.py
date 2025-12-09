@@ -287,13 +287,13 @@ class HtmlToObsidianPipeline:
             else:
                 logger.info("原文非中文, 执行翻译")
                 translated = self._translate_to_chinese(original_markdown)
-                body_lines.append("## 中文翻译")
+                body_lines.append("# 中文翻译")
                 body_lines.append("")
                 body_lines.append(translated)
                 body_lines.append("")
                 body_lines.append("---")
                 body_lines.append("")
-                body_lines.append("## 原文")
+                body_lines.append("# 原文")
                 body_lines.append("")
                 body_lines.append(original_markdown)
         else:
