@@ -331,3 +331,7 @@ class HtmlToObsidianPipeline:
 
         logger.info("Markdown 文档构建完成")
         return "\n".join(front_matter_lines + body_lines)
+
+    def delete_file(self, file_path: str) -> str:
+        """删除 GitHub 上的文件。"""
+        return self._publisher.delete_file(file_path)
