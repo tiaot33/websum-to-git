@@ -85,15 +85,11 @@ http:
   # 可选：是否在抓取网页时校验 HTTPS 证书
   # 正常情况下请保持为 true；若本地环境证书链异常导致 SSLError，可暂时设为 false（存在安全风险）
   verify_ssl: true
-  # 抓取模式，可选: requests（默认，使用 requests 抓取）/ headless（Playwright Chromium）
-  fetch_mode: "requests"
 ```
 
 其中 `llm` 用于网页摘要生成，`llm_fast`（可选）用于标签与翻译，可指向不同端口/模型以获得更低时延或成本；若未配置 `llm_fast`，系统会退回到 `llm`。
 
 > 提示：请务必不要将包含真实密钥的 `config.yaml` 提交到 GitHub 公共仓库。
-
-若你将 `fetch_mode` 设置为 `headless`，请确保已执行前述 `python -m camoufox fetch`，并在 Linux 服务器上安装 Firefox 运行依赖（如 `libgtk-3-0`、`libdbus-glib-1-2`、`libxt6` 等）。
 
 ## 4. 运行服务
 

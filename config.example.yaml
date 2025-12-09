@@ -34,5 +34,3 @@ http:
   # 可选：是否在抓取网页时校验 HTTPS 证书
   # 正常情况下请保持为 true；如果本地环境证书链异常导致 SSLError，可暂时设为 false（存在安全风险）
   verify_ssl: true
-  # 抓取模式，可选值: requests（默认，使用 requests 抓取）/ headless（使用 Playwright Chromium 抓取）
-  fetch_mode: "requests"

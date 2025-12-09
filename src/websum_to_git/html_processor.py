@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from dataclasses import dataclass
 from urllib.parse import quote, urljoin, urlparse
 
 import requests
@@ -10,50 +9,13 @@ from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 from readability import Document
 
+from websum_to_git.fetchers.base import PageContent
+from websum_to_git.fetchers.html_headers import DEFAULT_HEADERS
+
 logger = logging.getLogger(__name__)
-
-DEFAULT_HEADERS = {
-    # 模拟常见桌面浏览器，降低被简单反爬和 UA 黑名单拦截的概率
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-    "Connection": "keep-alive",
-}
-
-_HEADLESS_EXTRA_HEADERS = {
-    key: value for key, value in DEFAULT_HEADERS.items() if key.lower() not in {"user-agent", "connection"}
-}
-
 
 class HeadlessFetchError(RuntimeError):
     """Headless 抓取过程中出现的异常。"""
-
-
-@dataclass
-class PageContent:
-    """网页内容数据结构。
-
-    Attributes:
-        url: 原始请求 URL
-        final_url: 最终 URL（可能经过重定向）
-        title: 网页标题
-        text: 纯文本内容（用于 LLM 摘要）
-        markdown: Markdown 格式的正文内容
-        raw_html: 原始 HTML（完整网页）
-        article_html: 提取后的文章 HTML（Readability 处理后）
-    """
-
-    url: str
-    final_url: str
-    title: str
-    text: str
-    markdown: str
-    raw_html: str
-    article_html: str
 
 
 def fetch_html(url: str, timeout: int = 15, verify: bool = True) -> tuple[str, str]:

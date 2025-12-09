@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import AppConfig
+from .fetchers import PageContent, fetch_page
 from .github_client import GitHubPublisher
-from .html_processor import PageContent, fetch_html, fetch_html_headless, parse_page
 from .llm_client import LLMClient
 from .markdown_chunker import estimate_token_length, split_markdown_into_chunks
 from .telegraph_client import TelegraphClient
@@ -62,29 +62,18 @@ class HtmlToObsidianPipeline:
     def process_url(self, url: str) -> PipelineResult:
         logger.info("开始处理 URL: %s", url)
 
-        # 步骤 1: 抓取网页
-        logger.info("步骤 1/5: 抓取网页内容 (模式: %s)", self._config.http.fetch_mode)
-        if self._config.http.fetch_mode == "headless":
-            html, final_url = fetch_html_headless(url)
-        else:
-            html, final_url = fetch_html(
-                url,
-                verify=self._config.http.verify_ssl,
-            )
-        logger.info("抓取完成, HTML 长度: %d, 最终 URL: %s", len(html), final_url)
+        # 步骤 1: 抓取并解析网页（自动选择合适的 Fetcher）
+        logger.info("步骤 1/4: 抓取并解析网页内容")
+        page = fetch_page(url, self._config)
+        logger.info("抓取完成, 标题: %s, Markdown 长度: %d", page.title, len(page.markdown))
 
-        # 步骤 2: 解析页面
-        logger.info("步骤 2/5: 解析页面内容")
-        page = parse_page(url=url, html=html, final_url=final_url)
-        logger.info("解析完成, 标题: %s, Markdown 长度: %d", page.title, len(page.markdown))
-
-        # 步骤 3: LLM 总结
-        logger.info("步骤 3/5: 调用 LLM 生成摘要")
+        # 步骤 2: LLM 总结
+        logger.info("步骤 2/4: 调用 LLM 生成摘要")
         summary_result = self._summarize_page(page)
         logger.info("摘要生成完成, AI 标题: %s", summary_result.ai_title)
 
-        # 步骤 4: 构建 Markdown 并发布到 GitHub
-        logger.info("步骤 4/5: 构建 Markdown 并发布到 GitHub")
+        # 步骤 3: 构建 Markdown 并发布到 GitHub
+        logger.info("步骤 3/4: 构建 Markdown 并发布到 GitHub")
         full_markdown = self._build_markdown(
             page=page,
             summary_result=summary_result,
@@ -98,8 +87,8 @@ class HtmlToObsidianPipeline:
         )
         logger.info("GitHub 发布成功, 文件路径: %s, commit: %s", github_result.file_path, github_result.commit_hash)
 
-        # 步骤 5: 上传到 Telegraph
-        logger.info("步骤 5/5: 上传到 Telegraph")
+        # 步骤 4: 上传到 Telegraph
+        logger.info("步骤 4/4: 上传到 Telegraph")
         telegraph_url: str | None = None
         try:
             telegraph_result = self._telegraph.publish_markdown(

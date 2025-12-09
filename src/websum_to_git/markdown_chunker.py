@@ -302,7 +302,7 @@ def _rebalance_chunks(chunks: list[str], max_tokens: int) -> list[str]:
     current = chunks[0].strip("\n")
     current_tokens = token_lengths[0]
 
-    for next_chunk, next_tokens in zip(chunks[1:], token_lengths[1:]):
+    for next_chunk, next_tokens in zip(chunks[1:], token_lengths[1:], strict=True):
         if not next_chunk.strip():
             continue
 

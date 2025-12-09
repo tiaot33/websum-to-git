@@ -131,7 +131,6 @@ github:
   branch: "main"            # 可选: 目标分支
   target_dir: "notes"       # 可选: 目标目录
 http:
-  fetch_mode: "requests"    # requests | headless
   verify_ssl: true
 ```
 

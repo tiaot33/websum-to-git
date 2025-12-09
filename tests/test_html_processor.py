@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+import requests
 import responses
 
 from websum_to_git.html_processor import (
@@ -72,7 +73,7 @@ class TestFetchHtml:
 
         responses.add(responses.GET, url, status=404)
 
-        with pytest.raises(Exception):  # requests.HTTPError
+        with pytest.raises(requests.HTTPError):
             fetch_html(url)
 
     @responses.activate

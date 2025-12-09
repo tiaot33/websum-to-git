@@ -51,7 +51,7 @@ def sample_telegram_config() -> TelegramConfig:
 @pytest.fixture
 def sample_http_config() -> HttpConfig:
     """创建测试用 HTTP 配置。"""
-    return HttpConfig(verify_ssl=True, fetch_mode="requests")
+    return HttpConfig(verify_ssl=True)
 
 
 @pytest.fixture
@@ -246,7 +246,6 @@ github:
   target_dir: "notes"
 
 http:
-  fetch_mode: requests
   verify_ssl: true
 """
     config_path = tmp_path / "test_config.yaml"

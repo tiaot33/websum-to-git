@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
 
 from websum_to_git.github_client import PublishResult
 from websum_to_git.html_processor import PageContent
@@ -136,6 +135,12 @@ class TestLoadPrompt:
 class TestHtmlToObsidianPipeline:
     """测试 HTML 到 Obsidian 的转换管道。"""
 
+    @pytest.fixture(autouse=True)
+    def _patch_token_estimate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """避免测试过程中触发 tiktoken 远程下载。"""
+
+        monkeypatch.setattr("websum_to_git.pipeline.estimate_token_length", lambda text: len(text))
+
     @pytest.fixture
     def mock_pipeline(self, sample_app_config: AppConfig) -> HtmlToObsidianPipeline:
         """创建带 mock 依赖的 Pipeline。"""
@@ -151,6 +156,7 @@ class TestHtmlToObsidianPipeline:
             mock_publisher.publish_markdown.return_value = PublishResult(
                 file_path="notes/test.md",
                 commit_hash="abc123",
+                web_url="https://github.com/example/notes/test.md",
             )
             mock_publisher_cls.return_value = mock_publisher
 
@@ -165,167 +171,29 @@ class TestHtmlToObsidianPipeline:
     # process_url 端到端测试
     # --------------------------------------------------------
 
-    def test_process_url_full_flow(self, mock_pipeline: HtmlToObsidianPipeline, sample_html: str) -> None:
+    def test_process_url_full_flow(
+        self, mock_pipeline: HtmlToObsidianPipeline, sample_page_content: PageContent
+    ) -> None:
         """完整的 URL 处理流程。"""
-        with patch("websum_to_git.pipeline.fetch_html") as mock_fetch:
-            mock_fetch.return_value = (sample_html, "https://example.com/python")
+        with patch("websum_to_git.pipeline.fetch_page") as mock_fetch_page:
+            mock_fetch_page.return_value = sample_page_content
 
-            with patch("websum_to_git.pipeline.parse_page") as mock_parse:
-                mock_parse.return_value = PageContent(
-                    url="https://example.com/python",
-                    final_url="https://example.com/python",
-                    title="Python 入门",
-                    text="Python 是一种编程语言...",
-                    markdown="# Python 入门\n\nPython 是一种编程语言...",
-                    raw_html=sample_html,
-                    article_html="<article>...</article>",
-                )
-
-                # 模拟 LLM 返回
-                _get_llm_mock(
-                    mock_pipeline
-                ).generate.return_value = "Python 入门指南\n\n> Python 是现代编程的基础...\n\n## 核心概念"
-                _get_fast_llm_mock(mock_pipeline).generate.return_value = "Python\nProgramming\nTutorial"
-
-                result = mock_pipeline.process_url("https://example.com/python")
-
-                assert result.file_path == "notes/test.md"
-                assert result.commit_hash == "abc123"
-
-                # 验证 publish_markdown 被调用
-                _get_publisher_mock(mock_pipeline).publish_markdown.assert_called_once()
-
-    def test_process_url_with_headless_mode(self, sample_app_config: AppConfig, sample_html: str) -> None:
-        """使用 headless 模式抓取。"""
-        sample_app_config.http.fetch_mode = "headless"
-
-        with (
-            patch("websum_to_git.pipeline.LLMClient"),
-            patch("websum_to_git.pipeline.GitHubPublisher") as mock_publisher_cls,
-            patch("websum_to_git.pipeline.fetch_html_headless") as mock_fetch,
-            patch("websum_to_git.pipeline.parse_page") as mock_parse,
-        ):
-            mock_publisher = MagicMock()
-            mock_publisher.publish_markdown.return_value = PublishResult(
-                file_path="notes/test.md", commit_hash="abc123"
+            _get_llm_mock(mock_pipeline).generate.return_value = (
+                "Python 入门指南\n\n> Python 是现代编程的基础...\n\n## 核心概念"
             )
-            mock_publisher_cls.return_value = mock_publisher
-
-            mock_fetch.return_value = (sample_html, "https://example.com")
-            mock_parse.return_value = PageContent(
-                url="https://example.com",
-                final_url="https://example.com",
-                title="Test",
-                text="Test content",
-                markdown="# Test\n\nTest content",
-                raw_html=sample_html,
-                article_html="<article>...</article>",
-            )
-
-            pipeline = HtmlToObsidianPipeline(sample_app_config)
-            _get_llm_mock(pipeline).generate.return_value = "标题\n内容"
-
-            pipeline.process_url("https://example.com")
-
-            mock_fetch.assert_called_once()
-
-    def test_process_url_requests_failure_falls_back_to_headless(
-        self,
-        mock_pipeline: HtmlToObsidianPipeline,
-        sample_html: str,
-        sample_page_content: PageContent,
-    ) -> None:
-        """requests 抓取失败时应自动尝试 headless。"""
-        with (
-            patch("websum_to_git.pipeline.fetch_html") as mock_fetch,
-            patch("websum_to_git.pipeline.fetch_html_headless") as mock_headless,
-            patch("websum_to_git.pipeline.fetch_html_via_mirror") as mock_mirror,
-            patch("websum_to_git.pipeline.parse_page") as mock_parse,
-        ):
-            mock_fetch.side_effect = requests.HTTPError("403 Forbidden")
-            mock_headless.return_value = (sample_html, "https://example.com/python")
-            mock_mirror.return_value = (sample_html, "https://mirror.example.com/python")
-            mock_parse.return_value = sample_page_content
+            _get_fast_llm_mock(mock_pipeline).generate.return_value = "Python\nProgramming\nTutorial"
 
             result = mock_pipeline.process_url("https://example.com/python")
 
-            assert mock_headless.call_count == 1
             assert result.file_path == "notes/test.md"
-            assert mock_mirror.call_count == 0
+            assert result.commit_hash == "abc123"
+            mock_fetch_page.assert_called_once_with("https://example.com/python", mock_pipeline._config)
+            _get_publisher_mock(mock_pipeline).publish_markdown.assert_called_once()
 
-    def test_process_url_headless_mode_falls_back_to_requests(
-        self,
-        sample_app_config: AppConfig,
-        sample_html: str,
-        sample_page_content: PageContent,
-    ) -> None:
-        """headless 模式下出现错误时应回退到 requests。"""
-        sample_app_config.http.fetch_mode = "headless"
-
-        with (
-            patch("websum_to_git.pipeline.LLMClient"),
-            patch("websum_to_git.pipeline.GitHubPublisher") as mock_publisher_cls,
-            patch("websum_to_git.pipeline.fetch_html") as mock_fetch,
-            patch("websum_to_git.pipeline.fetch_html_headless") as mock_headless,
-            patch("websum_to_git.pipeline.fetch_html_via_mirror") as mock_mirror,
-            patch("websum_to_git.pipeline.parse_page") as mock_parse,
-        ):
-            mock_publisher = MagicMock()
-            mock_publisher.publish_markdown.return_value = PublishResult(
-                file_path="notes/test.md",
-                commit_hash="abc123",
-            )
-            mock_publisher_cls.return_value = mock_publisher
-
-            mock_headless.side_effect = RuntimeError("blocked")
-            mock_fetch.return_value = (sample_html, "https://example.com/python")
-            mock_mirror.return_value = (sample_html, "https://mirror.example.com/python")
-            mock_parse.return_value = sample_page_content
-
-            pipeline = HtmlToObsidianPipeline(sample_app_config)
-            pipeline._llm = MagicMock()
-            pipeline._fast_llm = pipeline._llm
-            pipeline._publisher = mock_publisher
-
-            result = pipeline.process_url("https://example.com/python")
-
-            assert mock_fetch.call_count == 1
-            assert mock_mirror.call_count == 0
-            assert result.file_path == "notes/test.md"
-
-    def test_process_url_uses_mirror_fallback(
-        self,
-        mock_pipeline: HtmlToObsidianPipeline,
-        sample_html: str,
-        sample_page_content: PageContent,
-    ) -> None:
-        """requests/headless 均失败时应启用镜像兜底。"""
-        with (
-            patch("websum_to_git.pipeline.fetch_html") as mock_fetch,
-            patch("websum_to_git.pipeline.fetch_html_headless") as mock_headless,
-            patch("websum_to_git.pipeline.fetch_html_via_mirror") as mock_mirror,
-            patch("websum_to_git.pipeline.parse_page") as mock_parse,
-        ):
-            mock_fetch.side_effect = requests.HTTPError("403 Forbidden")
-            mock_headless.side_effect = RuntimeError("blocked")
-            mock_mirror.return_value = (sample_html, "https://mirror.example.com/python")
-            mock_parse.return_value = sample_page_content
-
-            result = mock_pipeline.process_url("https://example.com/python")
-
-            assert mock_mirror.call_count == 1
-            assert result.file_path == "notes/test.md"
-
-    def test_process_url_all_fetch_modes_fail(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
-        """所有抓取方式均失败时应抛出异常，不提交到 GitHub。"""
-        with (
-            patch("websum_to_git.pipeline.fetch_html") as mock_fetch,
-            patch("websum_to_git.pipeline.fetch_html_headless") as mock_headless,
-            patch("websum_to_git.pipeline.fetch_html_via_mirror") as mock_mirror,
-        ):
-            mock_fetch.side_effect = requests.HTTPError("403 Forbidden")
-            mock_headless.side_effect = RuntimeError("headless error")
-            mock_mirror.side_effect = requests.HTTPError("mirror error")
+    def test_process_url_fetch_failure(self, mock_pipeline: HtmlToObsidianPipeline) -> None:
+        """抓取失败时应抛出异常且不发布。"""
+        with patch("websum_to_git.pipeline.fetch_page") as mock_fetch_page:
+            mock_fetch_page.side_effect = RuntimeError("blocked")
 
             with pytest.raises(RuntimeError):
                 mock_pipeline.process_url("https://example.com/python")

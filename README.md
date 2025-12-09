@@ -70,14 +70,15 @@
   - 你配置的 LLM 服务（OpenAI / Anthropic / Gemini 等）
   - GitHub（用于 git clone / push）
 
-## 抓取模式与 Playwright
+## 抓取方式与 Headless 支持
 
-`config.yaml` 中的 `http.fetch_mode` 决定抓取网页的方式：
+系统会根据 URL 自动选择合适的 Fetcher：
 
-- `requests`（默认）：直接使用 `requests` 抓取 HTML，速度快，适合大多数静态页面
-- `headless`：通过 Camoufox (Firefox) 渲染页面后再提取 HTML，适合依赖 JS 渲染或懒加载的页面，内置反指纹检测能力
+- 优先尝试针对 Twitter、GitHub 等站点的专用抓取器
+- 其后使用基于 `requests` 的轻量抓取器处理大多数页面
+- 如安装了 Camoufox，将在必要时使用 Headless 浏览器作为兜底抓取方案
 
-启用 `headless` 时请先安装浏览器内核：
+如需启用基于 Camoufox 的 Headless 抓取，请先安装依赖：
 
 ```bash
 pip install -U camoufox[geoip]

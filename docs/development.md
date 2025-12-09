@@ -40,7 +40,7 @@
     - 写入 Markdown 文件到 `target_dir`
     - `git add` / `git commit` / `git push`
 - `websum_to_git/pipeline.py`
-  - `HtmlToObsidianPipeline.process_url(url)`：根据 `http.fetch_mode` 选择 `fetch_html` 或 `fetch_html_headless`，随后组合所有步骤
+  - `HtmlToObsidianPipeline.process_url(url)`：调用 `fetch_page` 自动选择合适的 Fetcher 抓取网页，随后组合所有步骤
   - `_build_markdown(...)`：整合 front matter + 摘要 + 图片列表
 - `websum_to_git/bot.py`
   - 消息匹配、URL 抽取、错误处理、运行入口（`run_bot`）
@@ -63,15 +63,6 @@ source .venv/bin/activate  # Windows 使用 .venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
-
-如需使用 `http.fetch_mode = headless`，请额外执行（首次即可）：
-
-```bash
-pip install -U camoufox[geoip]
-python -m camoufox fetch
-```
-
-Linux 环境若报错缺少系统库，请安装 Firefox 运行依赖：`libgtk-3-0`、`libdbus-glib-1-2`、`libxt6`、`libx11-xcb1`、`libasound2` 等。
 
 3. 准备配置文件
 

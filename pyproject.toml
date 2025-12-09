@@ -19,6 +19,7 @@ dependencies = [
     "markdownify",
     "tiktoken",
     "camoufox[geoip]",
+    "PyGithub",
 ]
 
 [project.scripts]
