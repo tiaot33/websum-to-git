@@ -18,9 +18,8 @@ from telegram.ext import (
 )
 
 from .config import AppConfig, load_config
-from .fetchers import FetchError
+from .fetchers import FetchError, capture_screenshot
 from .pipeline import HtmlToObsidianPipeline
-from .screenshot import capture_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +124,12 @@ class TelegramBotApp:
             await update.message.reply_text(f"处理失败: {exc}")
             return
 
-        message = f"✅ 处理完成\n\n📁 文件: `{result.file_path}`"
+        # 根据是否进行了 LLM 总结，显示不同的状态
+        if result.summarized:
+            message = f"✅ 处理完成\n\n📁 文件: `{result.file_path}`"
+        else:
+            message = f"⚠️ 内容较短，已保存原文\n\n📁 文件: `{result.file_path}`"
+
         if result.commit_hash:
             message += f"\n🔖 Commit: `{result.commit_hash[:7]}`"
         if result.github_url:

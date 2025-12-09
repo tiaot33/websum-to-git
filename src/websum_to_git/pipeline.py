@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import AppConfig
-from .fetchers import FetchError, PageContent, fetch_page
+from .fetchers import MIN_CONTENT_FOR_SUMMARY, FetchError, PageContent, fetch_page
 from .github_client import GitHubPublisher
 from .llm_client import LLMClient
 from .markdown_chunker import estimate_token_length, split_markdown_into_chunks
@@ -30,6 +30,7 @@ class SummaryResult:
 
     ai_title: str
     content: str
+    skipped: bool = False  # 是否跳过了 LLM 总结（内容过短时）
 
 
 @dataclass
@@ -40,6 +41,7 @@ class PipelineResult:
     commit_hash: str | None  # Git commit hash
     github_url: str | None  # GitHub 文件 Web 链接
     telegraph_url: str | None  # Telegraph 预览链接
+    summarized: bool = True  # 是否进行了 LLM 总结
 
 
 def _parse_summary_result(raw_output: str) -> SummaryResult:
@@ -110,6 +112,7 @@ class HtmlToObsidianPipeline:
             commit_hash=github_result.commit_hash,
             github_url=github_result.web_url,
             telegraph_url=telegraph_url,
+            summarized=not summary_result.skipped,
         )
 
     def _summarize_page(self, page: PageContent) -> SummaryResult:
@@ -118,6 +121,15 @@ class HtmlToObsidianPipeline:
         if not text:
             logger.warning("页面未提取到正文内容, 使用原始标题")
             return SummaryResult(ai_title=page.title, content="（页面中未提取到正文内容）")
+
+        # 内容过短时，跳过 LLM 总结，直接使用原始内容
+        if len(text) < MIN_CONTENT_FOR_SUMMARY:
+            logger.warning(
+                "页面内容过短 (%d 字符 < %d)，跳过 LLM 总结，直接使用原始内容",
+                len(text),
+                MIN_CONTENT_FOR_SUMMARY,
+            )
+            return SummaryResult(ai_title=page.title, content=text, skipped=True)
 
         max_tokens = self._config.llm.max_input_tokens
         token_count = estimate_token_length(text)
@@ -256,40 +268,64 @@ class HtmlToObsidianPipeline:
             front_matter_lines.append(f"  - {tag}")
         front_matter_lines.extend(["---", ""])
 
-        # 正文使用 AI 生成的精炼标题
+        # 正文构建
         body_lines: list[str] = []
-        body_lines.append(f"# {summary_result.ai_title}")
-        body_lines.append("")
-        body_lines.append(summary_result.content.strip())
-        body_lines.append("")
-
-        # 附加页面原文
         original_markdown = page.markdown.strip()
-        is_chinese = self._is_chinese_text(original_markdown)
-        logger.info("原文语言检测: %s", "中文" if is_chinese else "非中文")
 
-        body_lines.append("---")
-        body_lines.append("")
-
-        if is_chinese:
-            # 原文是中文，直接输出
-            logger.info("原文为中文, 直接附加")
-            body_lines.append("# 原文")
+        # 如果跳过了 LLM 总结（内容过短），只输出原文，不重复
+        if summary_result.skipped:
+            logger.info("内容过短，跳过摘要，直接输出原文")
+            body_lines.append(f"# {page.title}")
             body_lines.append("")
-            body_lines.append(original_markdown)
+            body_lines.append("> ⚠️ 内容较短，未生成 AI 摘要")
+            body_lines.append("")
+
+            # 检测语言，非中文则翻译
+            is_chinese = self._is_chinese_text(original_markdown)
+            if is_chinese:
+                body_lines.append(original_markdown)
+            else:
+                logger.info("原文非中文, 执行翻译")
+                translated = self._translate_to_chinese(original_markdown)
+                body_lines.append("## 中文翻译")
+                body_lines.append("")
+                body_lines.append(translated)
+                body_lines.append("")
+                body_lines.append("---")
+                body_lines.append("")
+                body_lines.append("## 原文")
+                body_lines.append("")
+                body_lines.append(original_markdown)
         else:
-            # 原文非中文，先输出翻译，再保留原文
-            logger.info("原文非中文, 执行翻译")
-            translated = self._translate_to_chinese(original_markdown)
-            body_lines.append("# 原文（中文翻译）")
+            # 正常流程：摘要 + 原文
+            body_lines.append(f"# {summary_result.ai_title}")
             body_lines.append("")
-            body_lines.append(translated)
+            body_lines.append(summary_result.content.strip())
             body_lines.append("")
+
+            is_chinese = self._is_chinese_text(original_markdown)
+            logger.info("原文语言检测: %s", "中文" if is_chinese else "非中文")
+
             body_lines.append("---")
             body_lines.append("")
-            body_lines.append("# 原文（原语言）")
-            body_lines.append("")
-            body_lines.append(original_markdown)
+
+            if is_chinese:
+                logger.info("原文为中文, 直接附加")
+                body_lines.append("# 原文")
+                body_lines.append("")
+                body_lines.append(original_markdown)
+            else:
+                logger.info("原文非中文, 执行翻译")
+                translated = self._translate_to_chinese(original_markdown)
+                body_lines.append("# 原文（中文翻译）")
+                body_lines.append("")
+                body_lines.append(translated)
+                body_lines.append("")
+                body_lines.append("---")
+                body_lines.append("")
+                body_lines.append("# 原文（原语言）")
+                body_lines.append("")
+                body_lines.append(original_markdown)
 
         body_lines.append("")
 
