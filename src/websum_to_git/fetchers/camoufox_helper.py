@@ -147,3 +147,91 @@ def fetch_with_camoufox(
         raise FetchError(f"Headless 抓取失败: {url}") from exc
 
     return html, final_url, data
+
+
+def remove_overlays(page: Any) -> None:
+    """移除常见的遮挡元素，如 Cookie 提示、弹窗、广告等。
+
+    Args:
+        page: Playwright Page 对象
+    """
+    logger.info("尝试移除页面悬浮窗和干扰元素")
+
+    # 1. 尝试点击 "接受/同意" 按钮
+    try:
+        page.evaluate(
+            """() => {
+                const keywords = [
+                    "accept", "accept all", "accept cookies", "agree", "i agree", "allow", "allow all", "consent",
+                    "接受", "同意", "允许", "全部接受", "此时接受", "知道了", "ok", "got it"
+                ];
+
+                // 查找可能的按钮元素
+                const candidates = Array.from(document.querySelectorAll('button, a, div[role="button"], input[type="button"], input[type="submit"], div[class*="button"], span[class*="button"]'));
+                
+                for (const el of candidates) {
+                    // 忽略不可见元素
+                    if (el.offsetParent === null) continue;
+                    
+                    const text = (el.innerText || el.textContent || "").trim().toLowerCase();
+                    
+                    // 检查文本是否匹配关键词
+                    // 优先完全匹配，或者是关键词加上简单的符号
+                    if (keywords.some(k => text === k || text === k + "!" || text === k + ".")) {
+                        console.log("Found connect button:", text);
+                        el.click();
+                        return; // 点击一个后通常页面会刷新或弹窗消失，不仅需点击多个
+                    }
+                }
+            }"""
+        )
+        # 点击后等待一小段时间，让页面响应（如设置 cookie 并移除遮罩）
+        page.wait_for_timeout(1000)
+    except Exception as e:
+        logger.warning("尝试点击 Cookie 接受按钮时出错 (忽略): %s", e)
+    
+    # 2. 移除常见干扰元素选择器
+    selectors = [
+        "#onetrust-banner-sdk",  # OneTrust Cookie Banner
+        ".fc-consent-root",      # Funding Choices
+        "#cookie-banner",
+        ".cookie-banner",
+        "#cookies-banner",
+        ".cookies-banner",
+        "[id*='cookie-consent']",
+        "[class*='cookie-consent']",
+        "[id*='cookie-notice']",
+        "[class*='cookie-notice']",
+        ".cc-banner",            # Cookie Consent
+        ".cc-window",
+        ".adsbygoogle",          # Google Ads
+        ".ad-container",
+        "div[class*='popup'][style*='fixed']", # 简单的通用弹窗匹配
+        "div[class*='modal'][style*='fixed']",
+    ]
+
+    try:
+        # 注入 JS 移除元素
+        page.evaluate(
+            """(selectors) => {
+                selectors.forEach(selector => {
+                    try {
+                        const elements = document.querySelectorAll(selector);
+                        elements.forEach(el => {
+                            // 简单的安全检查：避免删除过大的区域（可能是正文）
+                            // 这里只是简单判断，如果需要更安全可以检查文本量
+                            if (el.innerText.length < 2000) {
+                                el.remove();
+                            }
+                        });
+                    } catch (e) {
+                        // 忽略单个选择器的错误
+                    }
+                });
+            }""",
+            selectors,
+        )
+        logger.info("悬浮窗移除脚本执行完毕")
+    except Exception as e:
+        logger.warning("移除悬浮窗时发生错误: %s", e)
+
