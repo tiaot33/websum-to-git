@@ -37,7 +37,9 @@ def route(
     支持装饰函数（仅 process_page）或类（包含 process/extract/build 静态方法）。
 
     Args:
-        pattern: 域名字符串 (如 "twitter.com") 或 匹配函数
+        pattern: 域名字符串 (如 "twitter.com") 或 匹配函数。
+            - 当为字符串时，内部使用 ``pattern in url`` 做子串匹配；
+            - 当为函数时，应接受完整 URL 字符串并返回 bool，用于自定义匹配规则。
         timeout: 自定义超时
         wait_selector: 等待的选择器
         scroll: 是否滚动
