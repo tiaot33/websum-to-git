@@ -180,7 +180,7 @@ def remove_overlays(page: Any) -> None:
                         return; // 点击一个后通常页面会刷新或弹窗消失，不仅需点击多个
                     }
                 }
-            }"""
+            }"""  # noqa: E501
         )
         # 点击后等待一小段时间，让页面响应（如设置 cookie 并移除遮罩）
         page.wait_for_timeout(1000)
