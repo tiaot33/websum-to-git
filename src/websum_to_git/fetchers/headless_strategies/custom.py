@@ -21,8 +21,9 @@ from .registry import route
 
 logger = logging.getLogger(__name__)
 
-@route("huggingface.co", scroll=True)
-@route("hf.space", scroll=True)
+
+@route("huggingface.co", scroll=False)
+@route("hf.space", scroll=False)
 def process_huggingface(page: Any) -> None:
     """
     处理 HuggingFace 页面。
@@ -33,14 +34,20 @@ def process_huggingface(page: Any) -> None:
     # 尝试查找 Spaces iframe
     # 不使用 wait_for_selector，避免非 Spaces 页面超时
     iframe = page.query_selector("iframe.space-iframe")
-    if iframe:
-        src = iframe.get_attribute("src")
-        if src:
-            logger.info("检测到 HuggingFace Space iframe，正在重定向至: %s", src)
-            # 使用 goto 跳转到 iframe 内容页
-            # headless fetcher 后续会继续等待 load 事件并进行 Readability 提取
-            page.goto(src)
-        else:
-            logger.debug("检测到 iframe.space-iframe 但未找到 src 属性")
-    else:
+    if not iframe:
         logger.debug("当前 HuggingFace 页面未检测到 Space iframe，跳过重定向")
+        return
+
+    src = iframe.get_attribute("src")
+    if not src:
+        logger.debug("检测到 iframe.space-iframe 但未找到 src 属性")
+        return
+
+    logger.info("检测到 HuggingFace Space iframe，正在重定向至: %s", src)
+    try:
+        # 使用 goto 跳转到 iframe 内容页。此处不再依赖滚动脚本，避免 page.evaluate
+        # 在部分 Space 中触发 TargetClosedError。
+        page.goto(src, wait_until="domcontentloaded")
+    except Exception as exc:  # noqa: BLE001
+        # 不让单个 Space 的导航失败直接中断整个抓取流程，由外层统一处理。
+        logger.warning("跳转至 HuggingFace Space 失败，将回退为原页面内容: %s", exc)

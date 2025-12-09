@@ -41,6 +41,69 @@ def _ensure_camoufox() -> tuple[type, type[Exception] | None]:
     return _camoufox_cls, _playwright_timeout_error
 
 
+def _auto_scroll(
+    page: Any,
+    step: int | None = None,
+    max_iterations: int = 50,
+    base_delay_ms: int = 300,
+) -> None:
+    """自动滚动 API，将配置参数透传给 JS 执行。
+
+    Args:
+        page: Playwright/Camoufox Page 对象
+        step: 每次滚动的像素步长。默认 None (使用视口高度的一半)
+        max_iterations: 最大滚动次数
+        base_delay_ms: 每次滚动的基本等待时间(ms)
+    """
+    # 使用 Python 参数注入 JS，而不是拼接字符串
+    js_script = """
+    async ({ step, maxIterations, baseDelay }) => {
+        return new Promise((resolve) => {
+            // 如果未指定 step，则使用视口高度的一半，或默认 400
+            const scrollStep = step || (window.innerHeight / 2) || 400;
+            let position = 0;
+            let iterations = 0;
+
+            const scrollLoop = () => {
+                const maxScroll = Math.max(
+                    document.body.scrollHeight,
+                    document.documentElement.scrollHeight,
+                    0
+                );
+                
+                iterations++;
+                
+                // 判断是否还有滚动空间以及是否达到最大迭代次数
+                if (position < maxScroll && iterations < maxIterations) {
+                    window.scrollTo(0, position);
+                    position += scrollStep;
+                    
+                    // 随机化延迟，模拟人类行为
+                    const randomDelay = Math.random() * 500;
+                    setTimeout(scrollLoop, baseDelay + randomDelay);
+                } else {
+                    // 确保最后滚动到底部
+                    window.scrollTo(0, maxScroll);
+                    resolve();
+                }
+            };
+            scrollLoop();
+        });
+    }
+    """
+    
+    try:
+        # 传递参数字典给 evaluate
+        page.evaluate(js_script, {
+            "step": step,
+            "maxIterations": max_iterations,
+            "baseDelay": base_delay_ms
+        })
+    except Exception as e:
+        logger.warning("页面滚动执行出错 (非致命): %s", e)
+
+
+
 def fetch_with_camoufox(
     url: str,
     *,
@@ -97,37 +160,10 @@ def fetch_with_camoufox(
                     post_process(page)
 
                 if scroll:
-                    page.evaluate(
-                        """
-                        () => {
-                            return new Promise((resolve) => {
-                                const step = window.innerHeight / 2 || 400;
-                                const maxIterations = 50;
-                                let position = 0;
-                                let iterations = 0;
-
-                                const scrollStep = () => {
-                                    const maxScroll = Math.max(
-                                        document.body.scrollHeight,
-                                        document.documentElement.scrollHeight,
-                                        0
-                                    );
-                                    iterations++;
-                                    if (position < maxScroll && iterations < maxIterations) {
-                                        window.scrollTo(0, position);
-                                        position += step;
-                                        setTimeout(scrollStep, 300 + Math.random() * 500);
-                                    } else {
-                                        window.scrollTo(0, maxScroll);
-                                        resolve();
-                                    }
-                                };
-                                scrollStep();
-                            });
-                        }
-                        """
-                    )
-                    page.wait_for_timeout(3000)
+                    # 使用封装的滚动策略
+                    _auto_scroll(page, max_iterations=50)
+                    # 给赖加载内容一点额外的渲染时间
+                    page.wait_for_timeout(2000)
 
                 data = extract(page) if extract else None
                 html = page.content()
