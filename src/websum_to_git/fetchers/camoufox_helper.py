@@ -168,13 +168,10 @@ def remove_overlays(page: Any) -> None:
 
                 // 查找可能的按钮元素
                 const candidates = Array.from(document.querySelectorAll('button, a, div[role="button"], input[type="button"], input[type="submit"], div[class*="button"], span[class*="button"]'));
-                
                 for (const el of candidates) {
                     // 忽略不可见元素
                     if (el.offsetParent === null) continue;
-                    
                     const text = (el.innerText || el.textContent || "").trim().toLowerCase();
-                    
                     // 检查文本是否匹配关键词
                     // 优先完全匹配，或者是关键词加上简单的符号
                     if (keywords.some(k => text === k || text === k + "!" || text === k + ".")) {
@@ -189,11 +186,11 @@ def remove_overlays(page: Any) -> None:
         page.wait_for_timeout(1000)
     except Exception as e:
         logger.warning("尝试点击 Cookie 接受按钮时出错 (忽略): %s", e)
-    
+
     # 2. 移除常见干扰元素选择器
     selectors = [
         "#onetrust-banner-sdk",  # OneTrust Cookie Banner
-        ".fc-consent-root",      # Funding Choices
+        ".fc-consent-root",  # Funding Choices
         "#cookie-banner",
         ".cookie-banner",
         "#cookies-banner",
@@ -202,11 +199,11 @@ def remove_overlays(page: Any) -> None:
         "[class*='cookie-consent']",
         "[id*='cookie-notice']",
         "[class*='cookie-notice']",
-        ".cc-banner",            # Cookie Consent
+        ".cc-banner",  # Cookie Consent
         ".cc-window",
-        ".adsbygoogle",          # Google Ads
+        ".adsbygoogle",  # Google Ads
         ".ad-container",
-        "div[class*='popup'][style*='fixed']", # 简单的通用弹窗匹配
+        "div[class*='popup'][style*='fixed']",  # 简单的通用弹窗匹配
         "div[class*='modal'][style*='fixed']",
     ]
 
@@ -234,4 +231,3 @@ def remove_overlays(page: Any) -> None:
         logger.info("悬浮窗移除脚本执行完毕")
     except Exception as e:
         logger.warning("移除悬浮窗时发生错误: %s", e)
-

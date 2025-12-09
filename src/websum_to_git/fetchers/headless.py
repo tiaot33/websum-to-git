@@ -24,9 +24,7 @@ def fetch_headless(url: str, config: AppConfig) -> PageContent:
     timeout, _ = get_common_config(config)
     logger.info("使用 HeadlessFetcher 抓取: %s (timeout=%d)", url, timeout)
 
-    html, final_url, _ = fetch_with_camoufox(
-        url, timeout=timeout, scroll=True, post_process=remove_overlays
-    )
+    html, final_url, _ = fetch_with_camoufox(url, timeout=timeout, scroll=True, post_process=remove_overlays)
 
     title, article_html, markdown, text = extract_article(html, final_url)
 
