@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import tempfile
 import time
 from pathlib import Path
 
-from .camoufox_helper import _ensure_camoufox
+from .camoufox_helper import _ensure_camoufox, _run_in_fresh_thread
 from .structs import FetchError
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,39 @@ def capture_screenshot(url: str, timeout: int = 15, full_page: bool = True) -> b
     tmp_dir = Path(tempfile.gettempdir())
     screenshot_path = tmp_dir / f"websum_url2img_{int(time.time() * 1000)}.png"
 
+    try:
+        task = lambda: _capture_with_camoufox(  # noqa: E731
+            camoufox_cls,
+            playwright_timeout_error,
+            url,
+            timeout,
+            full_page,
+            screenshot_path,
+        )
+        try:
+            loop = asyncio.get_running_loop()
+            data = _run_in_fresh_thread(task) if loop.is_running() else task()
+        except RuntimeError:
+            data = task()
+    finally:
+        try:  # noqa: SIM105
+            screenshot_path.unlink(missing_ok=True)
+        except Exception:
+            # 删除失败不影响主流程
+            pass
+
+    logger.info("Camoufox 截图完成: %s", url)
+    return data
+
+
+def _capture_with_camoufox(
+    camoufox_cls: type,
+    playwright_timeout_error: type[Exception] | None,
+    url: str,
+    timeout: int,
+    full_page: bool,
+    screenshot_path: Path,
+) -> bytes:
     try:
         with camoufox_cls(
             geoip=True,
@@ -65,17 +99,8 @@ def capture_screenshot(url: str, timeout: int = 15, full_page: bool = True) -> b
             finally:
                 page.close()
 
-        data = screenshot_path.read_bytes()
+        return screenshot_path.read_bytes()
     except FetchError:
         raise
     except Exception as exc:  # pragma: no cover - 多种底层异常
         raise FetchError(f"Headless 截图失败: {url}") from exc
-    finally:
-        try:  # noqa: SIM105
-            screenshot_path.unlink(missing_ok=True)
-        except Exception:
-            # 删除失败不影响主流程
-            pass
-
-    logger.info("Camoufox 截图完成: %s", url)
-    return data

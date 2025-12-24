@@ -8,7 +8,7 @@
 
 1) `bot.TelegramBotApp`  
    - 抽取消息中的第一个 URL，或处理 `/url2img`、删除回调  
-   - 调用 `HtmlToObsidianPipeline.process_url` 完整处理  
+   - 将任务入队，由调度器受控并发执行（避免多任务时阻塞 update 处理）  
 2) `pipeline.HtmlToObsidianPipeline`  
    - `fetchers.fetch_page`：显式路由（GitHub 专用）→ Camoufox Headless → Firecrawl 兜底（内容 <500 且配置）  
    - `_summarize_page`：tiktoken 估算，短内容跳过 LLM，长内容分片总结  
@@ -22,7 +22,8 @@ Markdown 输出要点：front matter 包含 `source/created_at/tags`；摘要从
 ## 模块职责
 
 - `config.py`：`AppConfig` 及子配置；`load_config` 校验必填字段，OpenAI/Responses 默认 base_url。  
-- `bot.py`：命令 `/start` `/help` `/url2img`，消息 URL 处理，删除回调写入 GitHub，心跳文件 `/tmp/websum_bot_heartbeat`。  
+- `bot.py`：命令 `/start` `/help` `/status` `/url2img`，消息 URL 入队处理，删除回调写入 GitHub，心跳文件 `/tmp/websum_bot_heartbeat`。  
+- `task_queue.py`：in-memory 任务队列与并发控制（全局并发 + 单 Chat 顺序）。  
 - `pipeline.py`：抓取→摘要/翻译→Markdown→GitHub/Telegraph；常量 `MIN_CONTENT_FOR_SUMMARY=500`。  
 - `fetchers/__init__.py`：路由表 + Headless 兜底 + Firecrawl 回退；`MIN_CONTENT_FOR_RETRY=500`；导出 `PageContent`、`FetchError`、`capture_screenshot`。  
 - `fetchers/headless.py` + `headless_strategies/*`：Camoufox 抓取，策略注册表（Twitter 登录遮挡/数据提取，HuggingFace iframe 跳转等）。  

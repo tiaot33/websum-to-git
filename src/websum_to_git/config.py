@@ -30,6 +30,12 @@ class GitHubConfig:
 @dataclass
 class TelegramConfig:
     bot_token: str
+    # Bot 任务并发上限（正在执行的任务数）
+    max_concurrent_jobs: int = 2
+    # 全局 pending 队列上限（不含 running）
+    max_queue_size: int = 50
+    # 单个 Chat pending 队列上限（不含 running）
+    max_queue_size_per_chat: int = 10
 
 
 @dataclass
@@ -100,7 +106,18 @@ def load_config(path: str | Path) -> AppConfig:
     firecrawl_raw = raw.get("firecrawl")
     http_raw = raw.get("http", {}) or {}
 
-    telegram = TelegramConfig(bot_token=_require(telegram_raw, "bot_token"))
+    telegram = TelegramConfig(
+        bot_token=_require(telegram_raw, "bot_token"),
+        max_concurrent_jobs=int(telegram_raw.get("max_concurrent_jobs", 2)),
+        max_queue_size=int(telegram_raw.get("max_queue_size", 50)),
+        max_queue_size_per_chat=int(telegram_raw.get("max_queue_size_per_chat", 10)),
+    )
+    if telegram.max_concurrent_jobs <= 0:
+        raise ValueError("配置非法: telegram.max_concurrent_jobs 必须 > 0")
+    if telegram.max_queue_size <= 0:
+        raise ValueError("配置非法: telegram.max_queue_size 必须 > 0")
+    if telegram.max_queue_size_per_chat <= 0:
+        raise ValueError("配置非法: telegram.max_queue_size_per_chat 必须 > 0")
 
     llm = _build_llm_config(llm_raw)
     fast_llm = _build_llm_config(llm_fast_raw) if llm_fast_raw else None

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
+import threading
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from .structs import FetchError
 
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 _camoufox_cls: type | None = None
 _playwright_timeout_error: type[Exception] | None = None
+T = TypeVar("T")
 
 
 def _ensure_camoufox() -> tuple[type, type[Exception] | None]:
@@ -99,6 +102,26 @@ def _auto_scroll(
         logger.warning("页面滚动执行出错 (非致命): %s", e)
 
 
+def _run_in_fresh_thread(task: Callable[[], T]) -> T:
+    """在新线程执行 Camoufox 任务，隔离已有事件循环。"""
+
+    result: dict[str, Any] = {}
+
+    def runner() -> None:
+        try:
+            result["value"] = task()
+        except BaseException as exc:  # noqa: BLE001
+            result["error"] = exc
+
+    thread = threading.Thread(target=runner, name="camoufox-worker", daemon=True)
+    thread.start()
+    thread.join()
+
+    if "error" in result:
+        raise result["error"]  # type: ignore[misc]
+    return result["value"]  # type: ignore[return-value]
+
+
 def fetch_with_camoufox(
     url: str,
     *,
@@ -121,63 +144,73 @@ def fetch_with_camoufox(
 
     camoufox_cls, playwright_timeout_error = _ensure_camoufox()
 
+    def task() -> tuple[str, str, Any | None]:
+        try:
+            with camoufox_cls(
+                geoip=True,
+                config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5},
+            ) as browser:
+                page = browser.new_page()
+
+                try:
+                    logger.info("Camoufox 导航: %s", url)
+                    response = page.goto(
+                        url,
+                        timeout=max(timeout, 1) * 1000,
+                        wait_until="domcontentloaded",
+                    )
+
+                    if response and response.status >= 400:
+                        status_text = getattr(response, "status_text", "") or ""
+                        raise FetchError(f"HTTP {response.status} {status_text}".strip())
+
+                    # 加载等待
+                    if playwright_timeout_error:
+                        with contextlib.suppress(playwright_timeout_error):
+                            page.wait_for_load_state("load", timeout=8000)
+                        with contextlib.suppress(playwright_timeout_error):
+                            page.wait_for_load_state("networkidle", timeout=8000)
+
+                    if wait_selector and playwright_timeout_error:
+                        with contextlib.suppress(playwright_timeout_error):
+                            page.wait_for_selector(wait_selector, timeout=15000)
+
+                    if post_process:
+                        post_process(page)
+
+                    if scroll:
+                        # 使用封装的滚动策略
+                        _auto_scroll(page, max_iterations=50)
+                        # 给赖加载内容一点额外的渲染时间
+                        page.wait_for_timeout(2000)
+
+                    data = extract(page) if extract else None
+                    html = page.content()
+                    final_url = page.url
+                    logger.info("Camoufox 抓取完成, 最终 URL: %s, HTML 长度: %d", final_url, len(html))
+
+                except FetchError:
+                    raise
+                except Exception as exc:  # pragma: no cover - 具体异常在上层处理
+                    raise FetchError(f"页面加载失败: {url}") from exc
+                finally:
+                    page.close()
+
+        except FetchError:
+            raise
+        except Exception as exc:  # pragma: no cover
+            raise FetchError(f"Headless 抓取失败: {url}") from exc
+
+        return html, final_url, data
+
     try:
-        with camoufox_cls(
-            geoip=True,
-            config={"humanize": True, "humanize:maxTime": 1.5, "humanize:minTime": 0.5},
-        ) as browser:
-            page = browser.new_page()
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            return _run_in_fresh_thread(task)
+    except RuntimeError:
+        pass
 
-            try:
-                logger.info("Camoufox 导航: %s", url)
-                response = page.goto(
-                    url,
-                    timeout=max(timeout, 1) * 1000,
-                    wait_until="domcontentloaded",
-                )
-
-                if response and response.status >= 400:
-                    status_text = getattr(response, "status_text", "") or ""
-                    raise FetchError(f"HTTP {response.status} {status_text}".strip())
-
-                # 加载等待
-                if playwright_timeout_error:
-                    with contextlib.suppress(playwright_timeout_error):
-                        page.wait_for_load_state("load", timeout=8000)
-                    with contextlib.suppress(playwright_timeout_error):
-                        page.wait_for_load_state("networkidle", timeout=8000)
-
-                if wait_selector and playwright_timeout_error:
-                    with contextlib.suppress(playwright_timeout_error):
-                        page.wait_for_selector(wait_selector, timeout=15000)
-
-                if post_process:
-                    post_process(page)
-
-                if scroll:
-                    # 使用封装的滚动策略
-                    _auto_scroll(page, max_iterations=50)
-                    # 给赖加载内容一点额外的渲染时间
-                    page.wait_for_timeout(2000)
-
-                data = extract(page) if extract else None
-                html = page.content()
-                final_url = page.url
-                logger.info("Camoufox 抓取完成, 最终 URL: %s, HTML 长度: %d", final_url, len(html))
-
-            except FetchError:
-                raise
-            except Exception as exc:  # pragma: no cover - 具体异常在上层处理
-                raise FetchError(f"页面加载失败: {url}") from exc
-            finally:
-                page.close()
-
-    except FetchError:
-        raise
-    except Exception as exc:  # pragma: no cover
-        raise FetchError(f"Headless 抓取失败: {url}") from exc
-
-    return html, final_url, data
+    return task()
 
 
 def remove_overlays(page: Any) -> None:

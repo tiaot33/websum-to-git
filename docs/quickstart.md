@@ -59,6 +59,9 @@ cp config.example.yaml config.yaml
 ```yaml
 telegram:
   bot_token: "你的 Telegram Bot Token"
+  max_concurrent_jobs: 2
+  max_queue_size: 50
+  max_queue_size_per_chat: 10
 
 llm:
   provider: "openai"        # openai | openai-response | anthropic | gemini
@@ -130,10 +133,11 @@ docker compose up --build -d
 ```
 
 4. Bot 会回复：
-   - 先提示“已收到链接，正在抓取网页并调用 LLM 总结，请稍候……”
+   - 先提示“已入队/排队中”，并在后台异步抓取与总结
    - 完成后返回 GitHub 文件路径/commit，含删除按钮，可一键删除本次提交
    - 若发布 Telegraph 成功，会附上预览链接
 5. 截图：发送 `/url2img https://example.com` 获取整页截图（Camoufox）
+6. 队列状态：发送 `/status` 查看本会话与全局队列状态
 
 ## 6. 在 Obsidian 中查看
 

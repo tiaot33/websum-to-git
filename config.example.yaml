@@ -1,5 +1,11 @@
 telegram:
   bot_token: "YOUR_TELEGRAM_BOT_TOKEN"
+  # 同时运行的任务数上限（吞吐优先建议 2；资源紧张可设 1）
+  max_concurrent_jobs: 2
+  # 全局等待队列上限（不含正在运行中的任务）
+  max_queue_size: 50
+  # 单个会话的等待队列上限（防止刷屏/误触）
+  max_queue_size_per_chat: 10
 
 llm:
   # provider 可选: openai / openai-response / anthropic / gemini

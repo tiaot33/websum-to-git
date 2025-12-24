@@ -16,6 +16,7 @@
 ## 功能特性
 
 - Telegram Bot 接收消息中的第一个 `http/https` URL
+- 多任务自动排队与受控并发执行（`/status` 查看队列状态）
 - 自动抓取目标网页 HTML，提取标题、正文、图片
 - 通过统一封装调用多家 LLM：
   - `openai`：支持官方 OpenAI 以及 OpenAI 格式兼容服务（可配置 `base_url`）
