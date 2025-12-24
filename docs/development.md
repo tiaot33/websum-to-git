@@ -1,196 +1,111 @@
 # 开发文档（Development Guide）
 
-本文面向希望在本项目基础上二次开发或维护的工程师，假设你熟悉 Python、Git、Telegram Bot 和基础的 HTTP/LLM 调用。
+本文面向需要二次开发或维护的工程师，默认你熟悉 Python、Telegram Bot、HTTP/LLM/GitHub API。
 
 ## 架构概览
 
-整体架构是一个单进程 Python 服务，使用 Telegram 长轮询（`run_polling`）作为入口：
+单进程服务，Telegram 长轮询作为入口：
 
-1. `websum_to_git.bot.TelegramBotApp` 负责：
-   - 从 Telegram 消息中抽取第一个 URL
-   - 调用 `HtmlToObsidianPipeline` 执行业务流程
-   - 将结果反馈给用户
-2. `websum_to_git.pipeline.HtmlToObsidianPipeline` 串联：
-   - 抓取网页 HTML（`html_processor.fetch_html`）
-   - 解析正文与图片（`html_processor.parse_page`）
-   - 调用 LLM 生成 Markdown 总结（`llm_client.LLMClient.summarize_page`）
-   - 组装最终 Obsidian Markdown（带 YAML front matter 与图片引用）
-   - 调用 GitHub 发布（`github_client.GitHubPublisher.publish_markdown`）
-3. 配置集中在 `config.yaml`，由 `websum_to_git.config.load_config` 加载。
+1) `bot.TelegramBotApp`  
+   - 抽取消息中的第一个 URL，或处理 `/url2img`、删除回调  
+   - 调用 `HtmlToObsidianPipeline.process_url` 完整处理  
+2) `pipeline.HtmlToObsidianPipeline`  
+   - `fetchers.fetch_page`：显式路由（GitHub 专用）→ Camoufox Headless → Firecrawl 兜底（内容 <500 且配置）  
+   - `_summarize_page`：tiktoken 估算，短内容跳过 LLM，长内容分片总结  
+   - `_generate_tags`：使用 fast_llm（可选）  
+   - `_build_markdown`：front matter + 摘要；原文区统一一级标题，非中文先译后原文  
+   - GitHub 发布（PyGithub 直接创建文件），Telegraph 预览（失败不致命）  
+3) 配置集中 `config.py`，支持 fast_llm、firecrawl、http.verify_ssl。
 
-### 模块职责
+Markdown 输出要点：front matter 包含 `source/created_at/tags`；摘要从 `#` 开始；原文区使用 `# 原文`，非中文时再加 `# 原文（中文翻译）` 与 `# 原文（原语言）`。
 
-- `websum_to_git/config.py`
-  - 定义 `AppConfig` / `TelegramConfig` / `LLMConfig` / `GitHubConfig`
-  - 从 YAML 加载配置并进行基本校验（必填字段）
-- `websum_to_git/html_processor.py`
-  - `fetch_html(url)`: 使用 `requests` 获取 HTML
-  - `fetch_html_headless(url)`: 使用 Camoufox (Firefox) 渲染页面并返回最终 HTML/URL
-  - `parse_page(url, html, final_url)`: 使用 `BeautifulSoup`:
-    - 清理 `script/style/noscript`
-    - 从 `<title>` 获取标题（fallback 为最终 URL）
-    - 从 `<body>` 提取纯文本正文
-    - 提取 `<img>` 标签并用 `urljoin` 转为绝对 URL
-- `websum_to_git/llm_client.py`
-  - `LLMClient.summarize_page(...)`: 调用 OpenAI 格式 `/v1/chat/completions`
-  - 控制提示词、温度、最长正文长度等
-- `websum_to_git/github_client.py`
-  - `GitHubPublisher.publish_markdown(...)`:
-    - 使用 PAT 通过 HTTPS 克隆指定 repo/branch 至临时目录
-    - 写入 Markdown 文件到 `target_dir`
-    - `git add` / `git commit` / `git push`
-- `websum_to_git/pipeline.py`
-  - `HtmlToObsidianPipeline.process_url(url)`：调用 `fetch_page` 自动选择合适的 Fetcher 抓取网页，随后组合所有步骤
-  - `_build_markdown(...)`：整合 front matter + 摘要 + 图片列表
-- `websum_to_git/bot.py`
-  - 消息匹配、URL 抽取、错误处理、运行入口（`run_bot`）
-- `websum_to_git/main.py`
-  - CLI 入口，解析 `--config` 参数并启动 Bot
+## 模块职责
+
+- `config.py`：`AppConfig` 及子配置；`load_config` 校验必填字段，OpenAI/Responses 默认 base_url。  
+- `bot.py`：命令 `/start` `/help` `/url2img`，消息 URL 处理，删除回调写入 GitHub，心跳文件 `/tmp/websum_bot_heartbeat`。  
+- `pipeline.py`：抓取→摘要/翻译→Markdown→GitHub/Telegraph；常量 `MIN_CONTENT_FOR_SUMMARY=500`。  
+- `fetchers/__init__.py`：路由表 + Headless 兜底 + Firecrawl 回退；`MIN_CONTENT_FOR_RETRY=500`；导出 `PageContent`、`FetchError`、`capture_screenshot`。  
+- `fetchers/headless.py` + `headless_strategies/*`：Camoufox 抓取，策略注册表（Twitter 登录遮挡/数据提取，HuggingFace iframe 跳转等）。  
+- `fetchers/camoufox_helper.py`：惰性加载 Camoufox，自动滚动，移除 Cookie/弹窗遮罩。  
+- `fetchers/firecrawl.py`：Firecrawl API 抓取 markdown/html，带元数据兜底。  
+- `fetchers/github.py`：PyGithub 路由仓库/Issue/PR/文件/Gist，生成 Markdown。  
+- `fetchers/screenshot.py`：Camoufox 全页截图（`/url2img` 使用）。  
+- `markdown_chunker.py`：Markdown 结构分片，tiktoken 估算。  
+- `llm_client.py`：OpenAI / OpenAI-Response / Anthropic / Gemini 客户端，支持 thinking 配置与超时。  
+- `github_client.py`：PyGithub 直接创建/删除文件（不使用 git clone）。  
+- `telegraph_client.py`：匿名账户创建 + Markdown→Telegraph JSON 简化转换。
 
 ## 本地开发流程
 
 ### 环境准备
 
-1. 创建虚拟环境（推荐）
-
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows 使用 .venv\Scripts\activate
-```
-
-2. 安装依赖
-
-```bash
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+# 若需 Headless 抓取/截图
+pip install -U camoufox[geoip]
+python -m camoufox fetch
 ```
 
-3. 准备配置文件
+复制配置：
 
 ```bash
 cp config.example.yaml config.yaml
 ```
 
-根据需要填入：
-- Telegram Bot Token
-- LLM base_url / api_key / model（`llm` 用于摘要，可另外提供 `llm_fast` 供标签/翻译使用）
-- GitHub repo / branch / target_dir / pat
-
-> 提醒：请不要把包含真实凭证的 `config.yaml` 提交到 Git 仓库。
+填入 Telegram Token、LLM（可选 fast_llm）、GitHub PAT/repo/branch/target_dir、可选 Firecrawl API Key、http.verify_ssl。
 
 ### 运行调试
-
-1. 直接运行模块入口：
 
 ```bash
 python src/main.py --config config.yaml
 ```
 
-1. 或在调试器中运行 `main.py` 的 `main()`。
-
-2. 在 Telegram 中向 Bot 发送一个 HTML 页面 URL，观察日志与行为。
-
-若需要以容器方式调试，可使用 `docker compose up --build`，默认会挂载根目录下的 `config.yaml`。
+在 Telegram 发送 URL 测试。`/url2img <url>` 可验证截图链路。删除按钮会调用 GitHub 删除对应文件。
 
 ### 日志
 
-`websum_to_git/main.py` 使用 `logging.basicConfig` 设置日志级别为 `INFO`。如需更详细日志，可修改为：
+`main.py` 默认 INFO。需要更详细可设为 DEBUG 或对单模块调高 logger 级别。
 
-```python
-logging.basicConfig(level=logging.DEBUG, ...)
-```
+## LLM 配置说明
 
-或在单个模块中增加更细粒度的日志。
+- provider：`openai`（chat.completions）、`openai-response`（responses）、`anthropic`（messages）、`gemini`（generative ai）。  
+- `enable_thinking`：为兼容的 provider 启用 thinking/reasoning；可在 fast_llm 关闭以加速标签/翻译。  
+- `max_input_tokens`：摘要/翻译分片阈值，默认 10000（fast_llm 默认 8000 示例）。  
+- fast_llm：若未配置则回退到 llm。
 
+## Markdown 结构调整
 
-#### 选择不同的 LLM Provider
+- 位置：`pipeline._build_markdown`。  
+- front matter：`source/created_at/tags`。  
+- 原文标题：全部一级标题；非中文时先译再原文。  
+- 提示词在 `src/websum_to_git/prompts/`，可按需修改摘要/标签/翻译模板。
 
-配置文件 `llm` 段用于网页摘要，`llm_fast` 段（可选）用于标签和翻译，两者字段完全一致：
+## 扩展指南
 
-- `provider: "openai"`（默认）
-  - 使用 OpenAI Chat Completions API（`chat.completions.create`）
-  - 支持 `base_url` 自定义（用于兼容 OpenAI 格式服务）
-- `provider: "openai-response"`
-  - 使用 OpenAI Responses API（`responses.create`）
-  - 同样支持通过 `base_url` 连接兼容 Responses 格式的服务
-- `provider: "anthropic"`
-  - 使用 `anthropic` 官方 SDK（messages API）
-  - 若配置了 `base_url`，将作为自定义 Anthropic 兼容服务地址传入客户端
-- `provider: "gemini"`
-  - 使用 `google-generativeai` SDK
-  - 若配置了 `base_url`，会作为 `client_options.api_endpoint` 传入，用于连接 Gemini 兼容服务
+- **新增 Headless 策略**：在 `fetchers/headless_strategies/custom.py` 使用 `@route("example.com", wait_selector="...")`；可提供 `process`/`extract`/`build`。  
+- **新增专用 Fetcher**：在 `fetchers/__init__.py` 的 `ROUTERS` 添加匹配器与 handler（签名 `handler(url, config) -> PageContent`）。  
+- **LLM Provider 扩展**：扩展 `config.py` provider 值，`llm_client.py` 添加 `_generate_with_xxx` 分支。  
+- **输出格式**：改 `pipeline._build_markdown` 和相关 prompts。
 
-所有 provider 均共享字段：
+## GitHub 发布策略
 
-- `api_key`: 对应服务的 API Key
-- `model`: 模型名称（如 `gpt-4.1-mini`、`claude-3.5-sonnet`、`gemini-1.5-pro` 等）
-
-`HtmlToObsidianPipeline` 会始终使用 `llm` 生成摘要；若提供了 `llm_fast`，则在生成标签与翻译原文时改用该配置，否则回退到 `llm`。
-
-### 调整 Markdown 结构
-
-- 修改位置：`websum_to_git/pipeline.py:_build_markdown`
-- 当前结构：
-  - YAML front matter（`source`、`created_at`、`title`）
-  - `# 标题`
-  - LLM 输出的摘要内容
-  - 可选的 `## Images` + `![](url)` 列表
-- 可扩展方向：
-  - 增加标签字段（如 `tags`）到 front matter
-  - 将图片段落改为折叠块、表格或分组展示
-
-### 支持更多消息格式
-
-当前只处理文本消息中出现的第一个 URL：
-
-- 匹配正则：`websum_to_git/bot.py:URL_REGEX`
-- 如需：
-  - 支持多 URL：可在正则上用 `findall` 并循环处理
-  - 支持按钮/命令：在 `bot.py` 中添加更多 `CommandHandler` 或 `CallbackQueryHandler`
-
-### GitHub 集成策略
-
-当前策略：**缓存 GitHub 仓库，只在需要时重新 clone，正常情况下仅 pull 最新代码**。
-
-- 缓存路径：默认使用项目根目录下的 `.websum_to_git/repos/<owner_repo>`（`/` 替换为 `_`）
-- 首次运行：
-  - 若缓存目录不存在，则使用 PAT 执行 `git clone --branch <branch> https://PAT@github.com/owner/repo.git`
-- 后续运行：
-  - 若缓存目录已存在：
-    - 执行 `git fetch origin <branch>`
-    - 执行 `git checkout <branch>`
-    - 执行 `git pull --ff-only origin <branch>`
-
-写入文件与提交仍在缓存仓库内完成：
-
-- 在 `target_dir` 子目录下创建 Markdown 文件
-- `git add` + `git commit` + `git push origin <branch>`
-
-如需修改缓存策略（例如缓存目录位置或清理逻辑），可调整：
-
-- 位置：`websum_to_git/github_client.py:31` 的 `_get_repo_dir`
-- 同步逻辑：`websum_to_git/github_client.py:43` 的 `_ensure_repo`
+- 使用 PyGithub `create_file`，文件名 `{timestamp}-{safe_title}.md`，可选 `target_dir`。  
+- 删除：`GitHubPublisher.delete_file` 获取 SHA 后删除（Bot 删除按钮使用）。  
+- 无 git clone/缓存逻辑，如需自定义命名或目录规则在 `github_client.py` 修改。
 
 ## 测试建议
 
-当前项目没有内置测试框架，你可以按需添加（如 `pytest`），但建议：
+- fetchers 路由与回退：专用 GitHub 命中、Headless 成功、Firecrawl 触发阈值。  
+- headless_strategies：Twitter 登录遮挡移除、数据提取完整性；HuggingFace iframe 跳转。  
+- pipeline：短内容跳过摘要、长文本分片/合并、翻译分片、原文标题 H1。  
+- markdown_chunker：标题换块、超长代码块、空文本。  
+- llm_client：各 provider 调用参数（thinking 配置），回退路径。  
+- github_client：创建/删除异常处理、路径生成。  
+- bot：删除回调链路、`/url2img` 错误处理、心跳文件写入。  
+- telegraph_client：Markdown 转换（front matter 去除、代码块/标题映射）。
 
-- 单元测试：
-  - `html_processor.parse_page`：给定固定 HTML，断言提取的标题、正文和图片 URL
-  - `pipeline._build_markdown`：给定 `PageContent` 和摘要，断言生成 Markdown 中：
-    - front matter 字段存在
-    - 图片 URL 全部出现在 `![](url)` 中
-- 集成测试（需要准备测试仓库与 Bot）：
-  - 使用测试 PAT 和测试 repo
-  - 用真实 HTML URL 执行一次完整流程，确认生成文件在目标目录出现
+## OpenSpec
 
-## OpenSpec 相关
-
-关于本次能力的规范与变更，请参考：
-
-- 变更：
-  - `openspec/changes/add-tgbot-html-to-obsidian/proposal.md`
-  - `openspec/changes/add-tgbot-html-to-obsidian/tasks.md`
-- 能力规范：
-  - `openspec/changes/add-tgbot-html-to-obsidian/specs/html-to-obsidian-sync/spec.md`
-
-如需对行为进行重大修改（如多格式输入、双向同步、增量更新等），建议先新增对应的 OpenSpec 变更再动手实现。
+重大能力/破坏性修改前参考 `openspec/AGENTS.md` 与 `openspec/changes/*`，按需新增 proposal/task/spec 并验证。

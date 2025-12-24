@@ -4,7 +4,7 @@
 
 ## 1. 准备环境
 
-1. 确保已安装 Python 3.10+  
+1. 确保已安装 Python 3.12+（建议 3.13）  
 2. 克隆项目代码：
 
 ```bash
@@ -25,7 +25,7 @@ source .venv/bin/activate  # Windows 用 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-如需启用无头浏览器模式，请额外运行（首次即可）：
+如需启用无头浏览器抓取/截图，请额外运行（首次即可）：
 
 ```bash
 pip install -U camoufox[geoip]
@@ -38,13 +38,13 @@ python -m camoufox fetch
 
 - Telegram Bot Token
   - 在 @BotFather 创建一个 Bot，并获取 Token
-- LLM 服务凭证（OpenAI 格式）
-  - 例如 OpenAI 官方、兼容 OpenAI 的国内外服务
-  - 获得一个 API Key 和对应的 `base_url`、`model` 名称
+- LLM 服务凭证（OpenAI/Responses/Anthropic/Gemini 任一）
+  - 获得 API Key 和对应的 `model`；如使用兼容服务，准备 `base_url`
 - GitHub PAT（Personal Access Token）
   - 访问 https://github.com/settings/tokens
   - 创建一个 PAT（建议仅授予必要的 `repo` 权限）
   - 准备一个用于存放 Obsidian 笔记的仓库（如 `yourname/your-notes-repo`）
+- （可选）Firecrawl API Key，用于兜底抓取短内容
 
 ## 3. 配置应用
 
@@ -61,25 +61,31 @@ telegram:
   bot_token: "你的 Telegram Bot Token"
 
 llm:
-  # provider 可选: openai / openai-response / anthropic / gemini
-  provider: "openai"
-  # 对于 openai/openai-response/anthropic/gemini 兼容服务，可通过 base_url 自定义地址
-  base_url: "https://api.openai.com"
+  provider: "openai"        # openai | openai-response | anthropic | gemini
+  base_url: "https://api.openai.com"   # openai/openai-response 默认可为空
   api_key: "你的 LLM API Key"
   model: "gpt-4.1-mini"
+  enable_thinking: true
+  max_input_tokens: 10000   # 长文分片阈值
 
 llm_fast:
-  # 可选：用于标签和翻译的快速模型，通常指向更便宜/延迟更低的端口
+  # 可选：用于标签和翻译的快速模型，缺省回退到 llm
   provider: "openai"
   base_url: "https://fast-llm.example.com"
   api_key: "你的 Fast LLM API Key"
   model: "gpt-4o-mini"
+  enable_thinking: false
+  max_input_tokens: 8000
 
 github:
   repo: "yourname/your-notes-repo"
   branch: "main"
   target_dir: "notes/telegram"
   pat: "你的 GitHub PAT"
+
+firecrawl:
+  # 可选：当 Headless 抓取内容 <500 字符时尝试兜底
+  api_key: "你的 Firecrawl API Key"
 
 http:
   # 可选：是否在抓取网页时校验 HTTPS 证书
@@ -96,7 +102,7 @@ http:
 在项目根目录执行：
 
 ```bash
-python  src/main.py --config config.yaml
+python src/main.py --config config.yaml
 ```
 
 启动成功后，你应当能在控制台看到类似：
@@ -125,23 +131,20 @@ docker compose up --build -d
 
 4. Bot 会回复：
    - 先提示“已收到链接，正在抓取网页并调用 LLM 总结，请稍候……”
-   - 完成后告知：生成的 Markdown 文件在 GitHub 仓库中对应的路径，例如：
-
-```text
-处理完成，已将笔记保存到 GitHub 目录中的文件: notes/telegram/20250101-123000-some-article-title.md
-Commit: <commit-hash>
-```
+   - 完成后返回 GitHub 文件路径/commit，含删除按钮，可一键删除本次提交
+   - 若发布 Telegraph 成功，会附上预览链接
+5. 截图：发送 `/url2img https://example.com` 获取整页截图（Camoufox）
 
 ## 6. 在 Obsidian 中查看
 
 1. 将你的 GitHub 仓库目录作为 Obsidian Vault 打开（或作为子目录挂载）
 2. 在 `target_dir` 对应目录（例如 `notes/telegram`）中找到刚生成的 Markdown 文件
 3. 打开文件，你将看到：
-   - YAML front matter：包含 `source`、`created_at`、`title`
-   - LLM 生成的正文摘要
-   - 末尾的 `## Images` 段落，列出正文中出现的图片（`![](url)`）
+   - YAML front matter：`source/created_at/tags`
+   - 摘要正文：以 `#` 开头的 AI 标题
+   - 原文区：统一一级标题；非中文时包含“原文（中文翻译）”与“原文（原语言）”
 
-这些远程图片将直接在 Obsidian 中加载显示。
+> 说明：图片由抓取器原样保留在正文 Markdown 内（取决于目标网页/Fetcher）。
 
 ## 7. 常见问题
 
@@ -150,12 +153,12 @@ Commit: <commit-hash>
   - 确保网络环境能访问 Telegram Bot API 和 LLM 服务
 
 - **GitHub 没有生成文件？**
-  - 检查日志中是否有 `git` 相关错误
-  - 确认 PAT 是否有足够权限，且没有开启额外的 2FA 限制
-  - 确认 `repo`、`branch`、`target_dir` 配置无误
+  - 确认 PAT 权限和 `repo/branch/target_dir` 是否正确
+  - 检查日志是否有 GitHub API 报错
 
-- **图片没有出现在 Markdown 中？**
-  - 检查网页 HTML 中图片是否在 `<body>` 内，且 `<img src="...">` 能被访问
-  - 当前实现会保留解析到的所有 `img` 的绝对 URL，并在 `## Images` 段落中统一展示
+- **抓取结果太短/为空？**
+  - 默认使用 Headless 抓取；若内容 <500 字符且配置了 Firecrawl，会自动重试 Firecrawl
+  - 部分站点需要 Camoufox，确保已安装并运行 `python -m camoufox fetch`
+  - 对登录墙/强脚本站点，尝试手动打开确认可见性
 
 如果你需要更深入的定制或开发，请参考 `docs/development.md`。
