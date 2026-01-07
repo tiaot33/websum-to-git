@@ -22,18 +22,6 @@ from .registry import route
 logger = logging.getLogger(__name__)
 
 
-@route("t.me", scroll=False)
-def process_telegram(page: Any) -> None:
-    """
-    处理 Telegram 消息嵌入页面。
-    移除底部的 widget_actions_wrap 横幅（包含 "Open in Telegram" 等按钮）。
-    """
-    banner = page.query_selector("#widget_actions_wrap")
-    if banner:
-        banner.evaluate("el => el.remove()")
-        logger.debug("已移除 Telegram 底部横幅 #widget_actions_wrap")
-
-
 @route("huggingface.co", scroll=False)
 @route("hf.space", scroll=False)
 def process_huggingface(page: Any) -> None:
