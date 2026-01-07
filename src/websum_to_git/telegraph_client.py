@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+# 默认重试配置
+_DEFAULT_RETRIES = 3
+_DEFAULT_BACKOFF_FACTOR = 1.0  # 退避因子: 1s, 2s, 4s
+_RETRYABLE_STATUS_CODES = {500, 502, 503, 504}  # 可重试的 HTTP 状态码
 
 # Telegraph API 基础地址
 _API_BASE = "https://api.telegra.ph"
@@ -21,12 +27,57 @@ class TelegraphResult:
 
 
 class TelegraphClient:
-    """Telegraph 匿名发布客户端。"""
+    """Telegraph 匿名发布客户端（带重试机制）。"""
 
-    def __init__(self, short_name: str = "WebSum-Bot") -> None:
+    def __init__(self, short_name: str = "WebSum-Bot", max_retries: int = _DEFAULT_RETRIES) -> None:
         self._session = requests.Session()
         self._access_token: str | None = None
         self._short_name = short_name
+        self._max_retries = max_retries
+
+    def _request_with_retry(
+        self,
+        url: str,
+        data: dict,
+        timeout: int = 30,
+    ) -> dict:
+        """发送 POST 请求，带重试机制。
+
+        重试场景：
+        - 连接层错误：ConnectionError, Timeout（如 ConnectionResetError）
+        - HTTP 5xx 错误：500, 502, 503, 504
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                response = self._session.post(url, data=data, timeout=timeout)
+                # 检查是否为可重试的 HTTP 状态码
+                if response.status_code in _RETRYABLE_STATUS_CODES:
+                    raise requests.exceptions.HTTPError(
+                        f"HTTP {response.status_code}",
+                        response=response,
+                    )
+                response.raise_for_status()
+                return response.json()
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.HTTPError,
+            ) as exc:
+                last_exc = exc
+                if attempt < self._max_retries:
+                    wait_time = _DEFAULT_BACKOFF_FACTOR * (2 ** (attempt - 1))
+                    logger.warning(
+                        "Telegraph 请求失败 (尝试 %d/%d): %s, %.1f 秒后重试",
+                        attempt,
+                        self._max_retries,
+                        exc,
+                        wait_time,
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logger.error("Telegraph 请求失败，已达最大重试次数: %s", exc)
+        raise last_exc  # type: ignore[misc]
 
     def _ensure_account(self) -> str:
         """确保已创建 Telegraph 账户，返回 access_token。"""
@@ -34,16 +85,14 @@ class TelegraphClient:
             return self._access_token
 
         logger.info("创建 Telegraph 匿名账户")
-        response = self._session.post(
+        data = self._request_with_retry(
             f"{_API_BASE}/createAccount",
             data={
                 "short_name": self._short_name,
                 "author_name": "WebSum Bot",
             },
-            timeout=10,
+            timeout=15,
         )
-        response.raise_for_status()
-        data = response.json()
 
         if not data.get("ok"):
             error = data.get("error", "未知错误")
@@ -74,7 +123,7 @@ class TelegraphClient:
         html_content = self._markdown_to_telegraph_html(content)
         logger.info("准备发布到 Telegraph, 标题: %s, 内容长度: %d", title, len(html_content))
 
-        response = self._session.post(
+        data = self._request_with_retry(
             f"{_API_BASE}/createPage",
             data={
                 "access_token": access_token,
@@ -85,8 +134,6 @@ class TelegraphClient:
             },
             timeout=30,
         )
-        response.raise_for_status()
-        data = response.json()
 
         if not data.get("ok"):
             error = data.get("error", "未知错误")
