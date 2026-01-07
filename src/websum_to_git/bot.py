@@ -219,8 +219,6 @@ class TelegramBotApp:
                 message += f"\n🔖 Commit: `{pipeline_result.commit_hash[:7]}`"
             if pipeline_result.github_url:
                 message += f"\n\n📂 [GitHub 查看]({pipeline_result.github_url})"
-            if pipeline_result.telegraph_url:
-                message += f"\n📖 [Telegraph 预览]({pipeline_result.telegraph_url})"
 
             # 添加删除按钮
             keyboard = None
@@ -239,6 +237,14 @@ class TelegramBotApp:
                 disable_web_page_preview=True,
                 reply_markup=reply_markup,
             )
+
+            # Telegraph 链接单独发送，启用链接预览
+            if pipeline_result.telegraph_url:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=pipeline_result.telegraph_url,
+                    disable_web_page_preview=False,
+                )
 
         async def on_failure(exc: Exception) -> None:
             logger.exception("处理 URL 失败: %s", url)
