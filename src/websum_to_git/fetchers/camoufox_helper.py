@@ -102,7 +102,7 @@ def _auto_scroll(
         logger.warning("页面滚动执行出错 (非致命): %s", e)
 
 
-def _run_in_fresh_thread(task: Callable[[], T]) -> T:
+def _run_in_fresh_thread[T](task: Callable[[], T]) -> T:
     """在新线程执行 Camoufox 任务，隔离已有事件循环。"""
 
     result: dict[str, Any] = {}
