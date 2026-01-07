@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class HeadlessRoute(NamedTuple):
     """Headless 抓取路由定义。"""
 
+    name: str  # 策略名称，用于日志输出
     matcher: Callable[[str], bool]
     config: HeadlessConfig
     process_page: Callable[[Page], None] | None = None
@@ -66,6 +67,7 @@ def route(
 
         # 注册路由
         r = HeadlessRoute(
+            name=obj.__name__,
             matcher=matcher,
             config=config,
             process_page=process_page,
@@ -73,7 +75,7 @@ def route(
             build_content=build_content,
         )
         _ROUTES.append(r)
-        logger.debug("已注册 Headless 策略: %s (pattern=%s)", obj.__name__, pattern)
+        logger.info("已注册 Headless 策略: %s (pattern=%s)", obj.__name__, pattern)
         return obj
 
     return decorator

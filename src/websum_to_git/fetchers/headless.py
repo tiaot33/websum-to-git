@@ -35,7 +35,7 @@ def fetch_headless(url: str, config: AppConfig) -> PageContent:
     extract = None
 
     if route:
-        logger.info("Headless Strategy 命中: %s pattern: %s", url, route.matcher)
+        logger.info("Headless Strategy 命中: %s (策略: %s)", url, route.name)
         cfg = route.config
         if cfg.timeout:
             timeout = cfg.timeout
