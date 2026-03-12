@@ -181,7 +181,7 @@ def fetch_with_camoufox(
                     if scroll:
                         # 使用封装的滚动策略
                         _auto_scroll(page, max_iterations=50)
-                        # 给赖加载内容一点额外的渲染时间
+                        # 给懒加载内容一点额外的渲染时间
                         page.wait_for_timeout(2000)
 
                     data = extract(page) if extract else None
