@@ -63,8 +63,8 @@ COPY --from=builder /app/.venv /app/.venv
 # 预下载固定版本的 Camoufox 浏览器内核。
 # 不能先执行 `camoufox set ...` 再 `camoufox fetch`：
 # 第一次 fetch 会清理兼容目录，导致 set 刚写入的 config.json 被删除，随后回退到默认 stable。
-RUN /app/.venv/bin/python -m camoufox fetch official/prerelease/146.0.1-alpha.50 && \
-    /app/.venv/bin/python -m camoufox set official/prerelease/146.0.1-alpha.50
+RUN /app/.venv/bin/python -m camoufox fetch official/prerelease/146.0.1-alpha.25 && \
+    /app/.venv/bin/python -m camoufox set official/prerelease/146.0.1-alpha.25
 
 # 复制应用源码
 COPY src /app/src
