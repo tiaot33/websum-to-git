@@ -18,6 +18,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ..url_utils import strip_tracking_params
+from .camoufox_helper import get_camoufox_browser_version
 from .defuddle import fetch_defuddle
 from .github import fetch_github
 from .headless import fetch_headless
@@ -123,4 +124,5 @@ __all__ = [
     "capture_screenshot",
     "fetch_page",
     "fetch_headless",
+    "get_camoufox_browser_version",
 ]

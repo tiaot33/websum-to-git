@@ -18,6 +18,28 @@ _playwright_timeout_error: type[Exception] | None = None
 T = TypeVar("T")
 
 
+def get_camoufox_browser_version() -> str:
+    """返回 Camoufox 当前激活的浏览器版本号，未安装时返回明确提示。"""
+
+    try:
+        from camoufox.multiversion import list_installed
+    except ModuleNotFoundError:
+        return "未安装"
+    except Exception as exc:  # pragma: no cover - 极少见的环境异常
+        logger.warning("加载 Camoufox 版本信息失败: %s", exc)
+        return "未知"
+
+    try:
+        for installed in list_installed():
+            if installed.is_active:
+                return installed.version.full_string
+    except Exception as exc:  # pragma: no cover - 运行时环境损坏或配置异常
+        logger.warning("读取 Camoufox 浏览器版本失败: %s", exc)
+        return "未知"
+
+    return "未安装"
+
+
 def _ensure_camoufox() -> tuple[type, type[Exception] | None]:
     """惰性加载 Camoufox/Playwright，避免重复样板。"""
 

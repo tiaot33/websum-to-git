@@ -22,7 +22,7 @@ from telegram.ext import (
 )
 
 from .config import AppConfig, load_config
-from .fetchers import capture_screenshot
+from .fetchers import capture_screenshot, get_camoufox_browser_version
 from .pipeline import HtmlToObsidianPipeline
 from .task_queue import ChatTaskQueueFullError, Job, TaskQueueFullError, TaskScheduler
 from .url_utils import strip_tracking_params
@@ -100,7 +100,8 @@ class TelegramBotApp:
             "📊 当前队列状态\n\n"
             f"全局：running {status.global_running}/{status.max_concurrent_jobs}，"
             f"pending {status.global_pending}/{status.max_queue_size}\n"
-            f"本会话：running {status.chat_running}，pending {status.chat_pending}/{status.max_queue_size_per_chat}\n\n"
+            f"本会话：running {status.chat_running}，pending {status.chat_pending}/{status.max_queue_size_per_chat}\n"
+            f"Camoufox 浏览器版本：{get_camoufox_browser_version()}\n\n"
             "提示：直接发送 URL 或使用 /url2img 会自动入队排队处理。"
         )
         await update.message.reply_text(text)
