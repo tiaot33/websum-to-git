@@ -34,6 +34,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     HOME="/app"
 
+ARG CAMOUFOX_VERSION=official/prerelease/146.0.1-alpha.25
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && \
@@ -63,8 +65,9 @@ COPY --from=builder /app/.venv /app/.venv
 # 预下载固定版本的 Camoufox 浏览器内核。
 # 不能先执行 `camoufox set ...` 再 `camoufox fetch`：
 # 第一次 fetch 会清理兼容目录，导致 set 刚写入的 config.json 被删除，随后回退到默认 stable。
-RUN /app/.venv/bin/python -m camoufox fetch official/prerelease/146.0.1-alpha.25 && \
-    /app/.venv/bin/python -m camoufox set official/prerelease/146.0.1-alpha.25
+# prerelease 安装会触发交互确认，这里显式输入 y，保证 Docker build 非交互可执行。
+RUN printf 'y\n' | /app/.venv/bin/python -m camoufox fetch "${CAMOUFOX_VERSION}" && \
+    /app/.venv/bin/python -m camoufox set "${CAMOUFOX_VERSION}"
 
 # 复制应用源码
 COPY src /app/src
