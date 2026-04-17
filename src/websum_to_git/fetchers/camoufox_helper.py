@@ -18,6 +18,22 @@ _playwright_timeout_error: type[Exception] | None = None
 T = TypeVar("T")
 
 
+def _describe_runtime_error(exc: Exception) -> str:
+    """提炼运行时异常描述，避免日志里只剩 URL。"""
+
+    detail = str(exc).strip()
+    if detail:
+        return detail
+
+    cause = exc.__cause__
+    if cause:
+        cause_text = str(cause).strip()
+        if cause_text:
+            return cause_text
+
+    return exc.__class__.__name__
+
+
 def get_camoufox_browser_version() -> str:
     """返回 Camoufox 当前激活的浏览器版本号，未安装时返回明确提示。"""
 
@@ -221,7 +237,7 @@ def fetch_with_camoufox(
         except FetchError:
             raise
         except Exception as exc:  # pragma: no cover
-            raise FetchError(f"Headless 抓取失败: {url}") from exc
+            raise FetchError(f"Headless 抓取失败: {url} ({_describe_runtime_error(exc)})") from exc
 
         return html, final_url, data
 

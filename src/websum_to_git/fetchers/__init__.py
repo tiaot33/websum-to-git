@@ -50,6 +50,22 @@ ROUTERS: list[tuple[Callable[[str], bool], Callable[[str, AppConfig], PageConten
 ]
 
 
+def _try_defuddle_fallback(url: str, config: AppConfig, *, failed_fetcher: str) -> PageContent | None:
+    """尝试使用 Defuddle 作为兜底抓取。
+
+    仅在显式启用 Defuddle 时执行，保持配置语义简单明确。
+    """
+    if not config.defuddle.enabled:
+        return None
+
+    logger.warning("%s 失败，尝试使用 Defuddle 兜底: %s", failed_fetcher, url)
+    try:
+        return _normalize_page_urls(fetch_defuddle(url, config))
+    except Exception as exc:
+        logger.warning("Defuddle 兜底抓取失败: %s", exc)
+        return None
+
+
 def fetch_page(url: str, config: AppConfig) -> PageContent:
     """根据配置抓取并解析单个 URL。
 
@@ -80,7 +96,17 @@ def fetch_page(url: str, config: AppConfig) -> PageContent:
 
     # 2. 使用默认 HeadlessFetcher 兜底抓取
     logger.info("使用默认 HeadlessFetcher 兜底抓取: %s", normalized_url)
-    result = _normalize_page_urls(fetch_headless(normalized_url, config))
+    try:
+        result = _normalize_page_urls(fetch_headless(normalized_url, config))
+    except FetchError as exc:
+        defuddle_result = _try_defuddle_fallback(normalized_url, config, failed_fetcher="HeadlessFetcher")
+        if defuddle_result is not None:
+            logger.info(
+                "HeadlessFetcher 失败后，Defuddle 兜底成功, 内容长度: %d",
+                len(defuddle_result.markdown.strip()),
+            )
+            return defuddle_result
+        raise exc
 
     # 3. 检查内容长度，如果过短且未显式关闭，则尝试 Defuddle 补充抓取
     if len(result.markdown.strip()) < MIN_CONTENT_FOR_RETRY and config.defuddle.enabled:
