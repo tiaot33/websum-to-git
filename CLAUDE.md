@@ -28,11 +28,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 **定位**：Telegram Bot 驱动的网页知识沉淀工具，抓取网页 → AI 总结/翻译 → 生成 Obsidian Markdown → 发布到 GitHub，并可生成 Telegraph 预览与网页截图。
 
-**核心流程**：用户发链接 → Bot 解析 → Fetchers 抓取（Headless + 策略；短内容可 Firecrawl 兜底） → LLM 总结/标签 → Markdown → GitHub 发布 → Telegraph 预览。
+**核心流程**：用户发链接 → Bot 解析 → Fetchers 抓取（Headless + 策略；短内容可选 Defuddle 兜底） → LLM 总结/标签 → Markdown → GitHub 发布 → Telegraph 预览。
 
 **技术栈**：
 - 运行时：Python 3.13，python-telegram-bot，uv/requirements
-- 抓取：Camoufox(Playwright Firefox)，Headless 策略注册表，Firecrawl（可选），PyGithub
+- 抓取：Camoufox(Playwright Firefox)，Headless 策略注册表，Defuddle（可选），PyGithub
 - 数据处理：readability-lxml，BeautifulSoup，markdownify，tiktoken
 - LLM：OpenAI / OpenAI-Response / Anthropic / Gemini（可启用 thinking）
 - 工具链：pyright，ruff
@@ -49,7 +49,7 @@ flowchart TB
         ROUTER[fetchers/__init__.py<br/>路由+兜底]
         HEADLESS[headless.py<br/>Camoufox]
         STRAT[headless_strategies<br/>Twitter/HF/自定义]
-        FIRE[firecrawl.py<br/>短内容补抓]
+        DEFUDDLE[defuddle.py<br/>短内容补抓]
         GH_FETCH[github.py<br/>GitHub 专用]
     end
 
@@ -72,7 +72,7 @@ flowchart TB
     ROUTER --> GH_FETCH
     ROUTER --> HEADLESS
     HEADLESS --> STRAT
-    ROUTER --> FIRE
+    ROUTER --> DEFUDDLE
     PIPE --> CHUNK
     PIPE --> LLM
     PIPE --> GH
@@ -84,7 +84,7 @@ flowchart TB
     LLM --> CFG
     GH --> CFG
 
-    ROUTER <--> FIRE
+    ROUTER <--> DEFUDDLE
     TG <--> TGAPI[Telegram API]
     GH <--> GHAPI[GitHub API]
     LLM <--> LLMAPI[LLM Providers]
@@ -95,13 +95,13 @@ flowchart TB
 
 | 模块 | 路径 | 职责 | 行数 |
 |------|------|------|------|
-| config | `src/websum_to_git/config.py` | 配置加载，支持 fast_llm/firecrawl/http | 133 |
+| config | `src/websum_to_git/config.py` | 配置加载，支持 fast_llm/defuddle/http | 133 |
 | bot | `src/websum_to_git/bot.py` | Telegram 入口，摘要、删除、截图 | 231 |
 | pipeline | `src/websum_to_git/pipeline.py` | 抓取→摘要/翻译→Markdown→GitHub/Telegraph | 337 |
-| fetchers 入口 | `src/websum_to_git/fetchers/__init__.py` | 显式路由、Headless 兜底、Firecrawl 回退 | 116 |
+| fetchers 入口 | `src/websum_to_git/fetchers/__init__.py` | 显式路由、Headless 兜底、可选 Defuddle 回退 | 116 |
 | headless+策略 | `fetchers/headless.py` + `fetchers/headless_strategies/*` | Camoufox 抓取 + Twitter/HF 等策略注册表 | 478 |
 | github fetcher | `src/websum_to_git/fetchers/github.py` | 仓库/Issue/PR/文件/Gist 抓取 | 362 |
-| firecrawl | `src/websum_to_git/fetchers/firecrawl.py` | Firecrawl API 补抓 | 75 |
+| defuddle | `src/websum_to_git/fetchers/defuddle.py` | Defuddle 代理补抓 | 111 |
 | screenshot | `src/websum_to_git/fetchers/screenshot.py` | Camoufox 网页截图 | 81 |
 | markdown_chunker | `src/websum_to_git/markdown_chunker.py` | Markdown 结构化分段/token 估算 | 380 |
 | llm_client | `src/websum_to_git/llm_client.py` | OpenAI/Anthropic/Gemini 封装 | 190 |
@@ -154,8 +154,10 @@ github:
   pat: "xxx"                # 必填: GitHub PAT
   branch: "main"            # 可选: 目标分支
   target_dir: "notes"       # 可选: 目标目录
-firecrawl:
-  api_key: "xxx"            # 可选: 兜底抓取
+defuddle:
+  enabled: true             # 可选: 默认开启，设为 false 可关闭短内容兜底
+  strip_tracking: true      # 默认移除 utm/fbclid/gclid 等追踪参数
+  base_url: null            # 可选: 自托管实例地址
 http:
   verify_ssl: true          # 抓取时是否校验证书
 ```
@@ -166,7 +168,7 @@ main.py:main()
   └── bot.py:run_bot()
         └── TelegramBotApp.handle_message() / url2img / delete
               └── pipeline.HtmlToObsidianPipeline.process_url()
-                    ├── fetchers.fetch_page(): GitHub 专用 → Headless 策略 → Firecrawl 兜底
+                    ├── fetchers.fetch_page(): GitHub 专用 → Headless 策略 → 可选 Defuddle 兜底
                     ├── markdown_chunker.split_markdown_into_chunks()
                     ├── llm_client.LLMClient.generate()
                     ├── github_client.GitHubPublisher.publish_markdown()
@@ -175,7 +177,7 @@ main.py:main()
 
 ## Markdown 输出格式
 
-- YAML front matter：source/created_at/tags 列表，保留原始标题。
+- YAML front matter：source/created_at/tags，必要时附带 author/site/published 等抓取元数据。
 - 摘要正文：`# {AI 标题}` 起始；内容过短时跳过 LLM，总览提示。
 - 原文区：统一使用一级标题；非中文时先输出 `# 原文（中文翻译）`，分隔线后 `# 原文（原语言）`。
 

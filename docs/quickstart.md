@@ -44,7 +44,7 @@ python -m camoufox fetch
   - 访问 https://github.com/settings/tokens
   - 创建一个 PAT（建议仅授予必要的 `repo` 权限）
   - 准备一个用于存放 Obsidian 笔记的仓库（如 `yourname/your-notes-repo`）
-- （可选）Firecrawl API Key，用于兜底抓取短内容
+- （可选）Defuddle 代理服务，用于兜底抓取短内容
 
 ## 3. 配置应用
 
@@ -86,9 +86,13 @@ github:
   target_dir: "notes/telegram"
   pat: "你的 GitHub PAT"
 
-firecrawl:
-  # 可选：当 Headless 抓取内容 <500 字符时尝试兜底
-  api_key: "你的 Firecrawl API Key"
+defuddle:
+  # 可选：默认开启；设为 false 可关闭短内容兜底
+  enabled: true
+  # 默认移除常见追踪参数，避免把 utm/fbclid/gclid 等写入最终笔记
+  strip_tracking: true
+  # 可选：使用自托管实例；缺省为 https://defuddle.md/
+  # base_url: "https://defuddle.example.com/"
 
 http:
   # 可选：是否在抓取网页时校验 HTTPS 证书
@@ -144,7 +148,7 @@ docker compose up --build -d
 1. 将你的 GitHub 仓库目录作为 Obsidian Vault 打开（或作为子目录挂载）
 2. 在 `target_dir` 对应目录（例如 `notes/telegram`）中找到刚生成的 Markdown 文件
 3. 打开文件，你将看到：
-   - YAML front matter：`source/created_at/tags`
+   - YAML front matter：`source/created_at/tags`，以及抓取器补充的 `author/site/published/...`
    - 摘要正文：以 `#` 开头的 AI 标题
    - 原文区：统一一级标题；非中文时包含“原文（中文翻译）”与“原文（原语言）”
 
@@ -161,7 +165,7 @@ docker compose up --build -d
   - 检查日志是否有 GitHub API 报错
 
 - **抓取结果太短/为空？**
-  - 默认使用 Headless 抓取；若内容 <500 字符且配置了 Firecrawl，会自动重试 Firecrawl
+  - 默认使用 Headless 抓取；若内容 <500 字符且未关闭 Defuddle，会自动重试 Defuddle
   - 部分站点需要 Camoufox，确保已安装并运行 `python -m camoufox fetch`
   - 对登录墙/强脚本站点，尝试手动打开确认可见性
 

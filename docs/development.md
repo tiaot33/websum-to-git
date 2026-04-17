@@ -7,17 +7,17 @@
 单进程服务，Telegram 长轮询作为入口：
 
 1) `bot.TelegramBotApp`  
-   - 抽取消息中的第一个 URL，或处理 `/url2img`、删除回调  
+   - 抽取消息中的第一个 URL（默认移除常见追踪参数），或处理 `/url2img`、删除回调  
    - 将任务入队，由调度器受控并发执行（避免多任务时阻塞 update 处理）  
 2) `pipeline.HtmlToObsidianPipeline`  
-   - `fetchers.fetch_page`：显式路由（GitHub 专用）→ Camoufox Headless → Firecrawl 兜底（内容 <500 且配置）  
+   - `fetchers.fetch_page`：显式路由（GitHub 专用）→ Camoufox Headless → Defuddle 兜底（内容 <500 且未显式关闭）  
    - `_summarize_page`：tiktoken 估算，短内容跳过 LLM，长内容分片总结  
    - `_generate_tags`：使用 fast_llm（可选）  
-   - `_build_markdown`：front matter + 摘要；原文区统一一级标题，非中文先译后原文  
+   - `_build_markdown`：front matter + 摘要；front matter 统一用 PyYAML 序列化；原文区统一一级标题，非中文先译后原文  
    - GitHub 发布（PyGithub 直接创建文件），Telegraph 预览（失败不致命）  
-3) 配置集中 `config.py`，支持 fast_llm、firecrawl、http.verify_ssl。
+3) 配置集中 `config.py`，支持 fast_llm、defuddle、http.verify_ssl；其中 `defuddle` 默认开启，`strip_tracking` 默认开启。
 
-Markdown 输出要点：front matter 包含 `source/created_at/tags`；摘要从 `#` 开始；原文区使用 `# 原文`，非中文时再加 `# 原文（中文翻译）` 与 `# 原文（原语言）`。
+Markdown 输出要点：front matter 至少包含 `source/created_at/tags`，如抓取器返回 `author/site/published/...` 也会一并保留；摘要从 `#` 开始；原文区使用 `# 原文`，非中文时再加 `# 原文（中文翻译）` 与 `# 原文（原语言）`。
 
 ## 模块职责
 
@@ -25,12 +25,13 @@ Markdown 输出要点：front matter 包含 `source/created_at/tags`；摘要从
 - `bot.py`：命令 `/start` `/help` `/status` `/url2img`，消息 URL 入队处理，删除回调写入 GitHub，心跳文件 `/tmp/websum_bot_heartbeat`。  
 - `task_queue.py`：in-memory 任务队列与并发控制（全局并发 + 单 Chat 顺序）。  
 - `pipeline.py`：抓取→摘要/翻译→Markdown→GitHub/Telegraph；常量 `MIN_CONTENT_FOR_SUMMARY=500`。  
-- `fetchers/__init__.py`：路由表 + Headless 兜底 + Firecrawl 回退；`MIN_CONTENT_FOR_RETRY=500`；导出 `PageContent`、`FetchError`、`capture_screenshot`。  
+- `fetchers/__init__.py`：路由表 + Headless 兜底 + 可选 Defuddle 回退；`MIN_CONTENT_FOR_RETRY=500`；导出 `PageContent`、`FetchError`、`capture_screenshot`。  
 - `fetchers/headless.py` + `headless_strategies/*`：Camoufox 抓取，策略注册表（Twitter 登录遮挡/数据提取，HuggingFace iframe 跳转等）。  
 - `fetchers/camoufox_helper.py`：惰性加载 Camoufox，自动滚动，移除 Cookie/弹窗遮罩。  
-- `fetchers/firecrawl.py`：Firecrawl API 抓取 markdown/html，带元数据兜底。  
+- `fetchers/defuddle.py`：Defuddle 代理抓取 Markdown，解析 front matter 元数据并可接自托管实例。  
 - `fetchers/github.py`：PyGithub 路由仓库/Issue/PR/文件/Gist，生成 Markdown。  
 - `fetchers/screenshot.py`：Camoufox 全页截图（`/url2img` 使用）。  
+- `url_utils.py`：统一移除 URL 中的常见追踪参数。  
 - `markdown_chunker.py`：Markdown 结构分片，tiktoken 估算。  
 - `llm_client.py`：OpenAI / OpenAI-Response / Anthropic / Gemini 客户端，支持 thinking 配置与超时。  
 - `github_client.py`：PyGithub 直接创建/删除文件（不使用 git clone）。  
@@ -55,7 +56,7 @@ python -m camoufox fetch
 cp config.example.yaml config.yaml
 ```
 
-填入 Telegram Token、LLM（可选 fast_llm）、GitHub PAT/repo/branch/target_dir、可选 Firecrawl API Key、http.verify_ssl。
+填入 Telegram Token、LLM（可选 fast_llm）、GitHub PAT/repo/branch/target_dir、可选 Defuddle 配置、http.verify_ssl。
 
 ### 运行调试
 
@@ -79,7 +80,7 @@ python src/main.py --config config.yaml
 ## Markdown 结构调整
 
 - 位置：`pipeline._build_markdown`。  
-- front matter：`source/created_at/tags`。  
+- front matter：`source/created_at/tags`，以及抓取器补充的附加元数据。  
 - 原文标题：全部一级标题；非中文时先译再原文。  
 - 提示词在 `src/websum_to_git/prompts/`，可按需修改摘要/标签/翻译模板。
 
@@ -98,7 +99,7 @@ python src/main.py --config config.yaml
 
 ## 测试建议
 
-- fetchers 路由与回退：专用 GitHub 命中、Headless 成功、Firecrawl 触发阈值。  
+- fetchers 路由与回退：专用 GitHub 命中、Headless 成功、Defuddle 触发阈值、默认开启与显式关闭。  
 - headless_strategies：Twitter 登录遮挡移除、数据提取完整性；HuggingFace iframe 跳转。  
 - pipeline：短内容跳过摘要、长文本分片/合并、翻译分片、原文标题 H1。  
 - markdown_chunker：标题换块、超长代码块、空文本。  

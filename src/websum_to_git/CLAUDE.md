@@ -17,7 +17,7 @@ graph LR
     FETCH[fetchers/__init__.py]
     HEAD[headless.py]
     STRAT[headless_strategies/*]
-    FIRE[firecrawl.py]
+    DEFUDDLE[defuddle.py]
     GH_FETCH[fetchers/github.py]
     SHOT[fetchers/screenshot.py]
     CHUNK[markdown_chunker.py]
@@ -29,7 +29,7 @@ graph LR
     MAIN --> BOT --> PIPE
     PIPE --> FETCH --> GH_FETCH
     FETCH --> HEAD --> STRAT
-    FETCH --> FIRE
+    FETCH --> DEFUDDLE
     PIPE --> CHUNK
     PIPE --> LLM
     PIPE --> GH
@@ -46,8 +46,8 @@ graph LR
 
 ### config.py - 配置管理
 
-- dataclass: `LLMConfig`（provider/base_url/enable_thinking/max_input_tokens），`GitHubConfig`，`TelegramConfig`，`FirecrawlConfig`，`HttpConfig`，聚合 `AppConfig`。
-- `load_config(path)`：加载 YAML，构建 fast_llm（可选，用于标签/翻译）、firecrawl（可选）、http 配置；OpenAI/Responses 默认 base_url=`https://api.openai.com`。
+- dataclass: `LLMConfig`（provider/base_url/enable_thinking/max_input_tokens），`GitHubConfig`，`TelegramConfig`，`DefuddleConfig`，`HttpConfig`，聚合 `AppConfig`。
+- `load_config(path)`：加载 YAML，构建 fast_llm（可选，用于标签/翻译）、defuddle（可选，默认开启，可显式关闭）、http 配置；OpenAI/Responses 默认 base_url=`https://api.openai.com`。
 - `_require` 校验必填字段；`max_input_tokens` 默认 10000。
 
 ### bot.py - Telegram 入口
@@ -60,10 +60,10 @@ graph LR
 
 - 依赖：`fetchers.fetch_page`、`markdown_chunker`、`LLMClient`、`GitHubPublisher`、`TelegraphClient`。
 - `process_url(url)` 步骤：
-  1. Fetchers 路由抓取（专用 GitHub → Headless 策略 → Firecrawl 兜底，当 markdown < 500 字符且配置了 firecrawl）。
+  1. Fetchers 路由抓取（专用 GitHub → Headless 策略 → 可选 Defuddle 兜底，当 markdown < 500 字符且未显式关闭 defuddle）。
   2. `_summarize_page`：内容 < `MIN_CONTENT_FOR_SUMMARY`(500) 时跳过 LLM，仅保存原文；否则估算 tokens，短文一次总结，长文按 Markdown 分片总结并拼接。
   3. `_generate_tags`：用 fast_llm（若配置）生成标签。
-  4. `_build_markdown`：front matter + 摘要；原文区一律一级标题，非中文先翻译再附原文；短内容提示“未生成 AI 摘要”；使用 fast_llm 翻译（分片）。
+  4. `_build_markdown`：front matter + 摘要；front matter 统一通过 PyYAML 生成；原文区一律一级标题，非中文先翻译再附原文；短内容提示“未生成 AI 摘要”；使用 fast_llm 翻译（分片）。
   5. GitHub 发布：`GitHubPublisher.publish_markdown`，文件名 `{timestamp}-{safe_title}.md`。
   6. Telegraph 发布（失败不致命），返回链接。
 - 其他：`delete_file(file_path)` 供 Bot 删除按钮使用。
@@ -73,9 +73,9 @@ graph LR
 - 入口 `fetchers.fetch_page(url, config)`：
   1. 显式路由表（当前内置 GitHub 专用 fetcher）。
   2. Headless 兜底（Camoufox），命中策略注册表时可定制处理/提取/构建。
-  3. Markdown 过短 (< `MIN_CONTENT_FOR_RETRY`=500) 且配置 firecrawl 时，尝试 Firecrawl 补抓。
+  3. Markdown 过短 (< `MIN_CONTENT_FOR_RETRY`=500) 且未显式关闭 defuddle 时，尝试 Defuddle 补抓。
 - 常量：`MIN_CONTENT_FOR_RETRY`、`MIN_CONTENT_FOR_SUMMARY`（均 500 字符）。
-- 公共结构：`PageContent`（pydantic BaseModel，url/final_url/title/text/markdown/raw_html/article_html），`FetchError`。
+- 公共结构：`PageContent`（pydantic BaseModel，url/final_url/title/text/markdown/raw_html/article_html/extra_meta），`FetchError`。
 - 截图：`capture_screenshot(url)`（Camoufox，全页）。
 
 #### headless.py + headless_strategies/*
@@ -89,9 +89,9 @@ graph LR
 - `camoufox_helper`：惰性加载、自动滚动、移除悬浮窗（点击接受按钮 + 移除常见选择器），Playwright 错误封装为 `FetchError`。
 - `html_utils`：Readability 提取、相对链接转绝对、HTML→Markdown（ATX 标题）。
 
-#### firecrawl.py
+#### defuddle.py
 
-- `fetch_firecrawl(url, config)`：Firecrawl API 抓取 markdown/html（默认缓存 2 天），带 metadata 标题/最终 URL 兜底；未配置 API Key 抛 `FetchError`。
+- `fetch_defuddle(url, config)`：Defuddle 代理抓取 Markdown，解析 YAML front matter，支持 `base_url` 自定义和追踪参数剥离；未启用时抛 `FetchError`。
 
 #### github.py
 
@@ -141,7 +141,7 @@ sequenceDiagram
     participant P as Pipeline
     participant F as Fetchers
     participant HF as Headless/策略
-    participant FC as Firecrawl
+    participant DF as Defuddle
     participant MC as markdown_chunker
     participant LC as llm_client
     participant GH as github_client
@@ -152,8 +152,8 @@ sequenceDiagram
     P->>F: fetch_page(url)
     F->>HF: headless 抓取(未命中专用)
     HF-->>F: PageContent(headless)
-    F->>FC: Firecrawl 补抓(内容<500 且配置)
-    FC-->>F: PageContent(firecrawl)
+    F->>DF: Defuddle 补抓(内容<500 且显式启用)
+    DF-->>F: PageContent(defuddle)
     F-->>P: PageContent
 
     alt 长文本
@@ -189,7 +189,7 @@ sequenceDiagram
 ## 测试建议
 
 - fetchers/headless_strategies：Twitter 登录遮挡移除、HuggingFace Space 跳转、滚动/等待行为。
-- fetchers/__init__：路由顺序、Firecrawl 兜底触发阈值、异常回退。
+- fetchers/__init__：路由顺序、Defuddle 兜底触发阈值、异常回退。
 - fetchers/github.py：仓库/Issue/PR/文件/Gist 路由及缺失 README/评论边界。
 - markdown_chunker.py：多级标题、长代码块、空文本、token 估算。
 - pipeline.py：短内容跳过摘要/翻译分片/H1 原文标题/标签生成。

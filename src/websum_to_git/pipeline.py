@@ -6,8 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from .config import AppConfig
 from .fetchers import MIN_CONTENT_FOR_SUMMARY, FetchError, PageContent, fetch_page
+from .fetchers.structs import EXTRA_META_KEYS
 from .github_client import GitHubPublisher
 from .llm_client import LLMClient
 from .markdown_chunker import estimate_token_length, split_markdown_into_chunks
@@ -42,6 +45,27 @@ class PipelineResult:
     github_url: str | None  # GitHub 文件 Web 链接
     telegraph_url: str | None  # Telegraph 预览链接
     summarized: bool = True  # 是否进行了 LLM 总结
+
+
+def _build_front_matter(page: PageContent, now: str, tags: list[str]) -> str:
+    """构建最终 Markdown 的 YAML front matter。"""
+    front_matter: dict[str, str | list[str]] = {
+        "source": page.final_url,
+        "created_at": now,
+    }
+    for key in EXTRA_META_KEYS:
+        value = page.extra_meta.get(key)
+        if value:
+            front_matter[key] = value.strip()
+    front_matter["tags"] = tags
+
+    serialized = yaml.safe_dump(
+        front_matter,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    ).strip()
+    return f"---\n{serialized}\n---\n"
 
 
 def _parse_summary_result(raw_output: str) -> SummaryResult:
@@ -256,17 +280,7 @@ class HtmlToObsidianPipeline:
         # 生成标签
         tags = self._generate_tags(summary_result.ai_title, summary_result.content)
 
-        # YAML front matter 中保留原始网页标题
-        front_matter_lines = [
-            "---",
-            f"source: {page.final_url}",
-            f"created_at: {now}",
-            "tags:",
-        ]
-        # tags 使用多行列表格式
-        for tag in tags:
-            front_matter_lines.append(f"  - {tag}")
-        front_matter_lines.extend(["---", ""])
+        front_matter = _build_front_matter(page, now, tags)
 
         # 正文构建
         body_lines: list[str] = []
@@ -330,7 +344,7 @@ class HtmlToObsidianPipeline:
         body_lines.append("")
 
         logger.info("Markdown 文档构建完成")
-        return "\n".join(front_matter_lines + body_lines)
+        return front_matter + "\n".join(body_lines)
 
     def delete_file(self, file_path: str) -> str:
         """删除 GitHub 上的文件。"""

@@ -36,10 +36,13 @@ github:
   target_dir: "notes/telegram" # 笔记相对仓库根目录的子目录，可留空表示仓库根目录
   pat: "YOUR_GITHUB_PAT"       # 注意不要将真实 PAT 提交到代码仓库
 
-firecrawl:
-  # 可选：配置 Firecrawl API Key 以启用 Firecrawl 抓取 (比 Headless 更快)
-  api_key: "YOUR_FIRECRAWL_API_KEY"
-
+defuddle:
+  # 可选：默认开启；设为 false 可关闭短内容 Defuddle 兜底
+  enabled: true
+  # 可选：默认移除 utm/fbclid/gclid 等常见追踪参数
+  strip_tracking: true
+  # 可选：替换为自托管实例地址；缺省使用官方 https://defuddle.md/
+  # base_url: "https://defuddle.example.com/"
 
 http:
   # 可选：是否在抓取网页时校验 HTTPS 证书

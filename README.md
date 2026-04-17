@@ -16,6 +16,7 @@
 ## 功能特性
 
 - Telegram Bot 接收消息中的第一个 `http/https` URL
+- 默认移除常见追踪参数（如 `utm_*`、`fbclid`、`gclid`），减少脏链接入库
 - 多任务自动排队与受控并发执行（`/status` 查看队列状态）
 - 自动抓取目标网页 HTML，提取标题、正文、图片
 - 通过统一封装调用多家 LLM：
@@ -24,7 +25,7 @@
   - `gemini`：调用 Google Gemini（`google-generativeai` SDK）
 - 输出 Obsidian 友好的 Markdown，包含：
   - 标题与正文总结
-  - YAML front matter（包含来源 URL、创建时间、标题）
+  - YAML front matter（包含来源 URL、创建时间、标签及抓取器补充元数据）
   - 正文图片链接（`![](url)` 形式）
 - 使用 GitHub PAT 将笔记以新文件形式提交到指定仓库及子目录
 
@@ -76,8 +77,8 @@
 系统会根据 URL 自动选择合适的 Fetcher：
 
 - 优先尝试针对 Twitter、GitHub 等站点的专用抓取器
-- 其后使用基于 `requests` 的轻量抓取器处理大多数页面
-- 如安装了 Camoufox，将在必要时使用 Headless 浏览器作为兜底抓取方案
+- 默认使用 Camoufox Headless 抓取大多数页面
+- 默认会在 Headless 内容过短时再尝试 Defuddle 兜底；可通过 `defuddle.enabled: false` 关闭
 
 关于如何为特定网站添加自定义 Headless 抓取策略（例如处理复杂的动态网页），请参考 [Headless 策略指南](docs/headless_strategies.md)。
 

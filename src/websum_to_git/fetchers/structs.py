@@ -7,6 +7,18 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Defuddle 等 fetcher 可能返回的元数据字段名（按期望的 YAML 顺序排列）。
+# 统一在这里声明，方便 pipeline 组装 front matter 时复用。
+EXTRA_META_KEYS: tuple[str, ...] = (
+    "author",
+    "site",
+    "domain",
+    "published",
+    "language",
+    "description",
+    "word_count",
+)
+
 if TYPE_CHECKING:
     from websum_to_git.config import AppConfig
 
@@ -48,6 +60,9 @@ class PageContent(BaseModel):
     markdown: str
     raw_html: str
     article_html: str
+    # 由 fetcher 额外提供的元数据（如 defuddle 返回的 author/site/published 等），
+    # pipeline 在生成最终 front matter 时会按需合并。
+    extra_meta: dict[str, str] = Field(default_factory=dict)
 
 
 class HeadlessConfig(BaseModel):

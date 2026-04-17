@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -39,15 +39,19 @@ class TelegramConfig:
 
 
 @dataclass
-class FirecrawlConfig:
-    api_key: str
-    base_url: str | None = None
-
-
-@dataclass
 class HttpConfig:
     # 控制抓取网页时是否校验证书；正常情况下应保持为 True
     verify_ssl: bool = True
+
+
+@dataclass
+class DefuddleConfig:
+    # 是否启用 Defuddle 作为短内容兜底抓取；默认开启，可按需显式关闭
+    enabled: bool = True
+    # Defuddle 代理服务地址；可替换为自托管实例
+    base_url: str | None = None
+    # 默认移除常见追踪参数，避免抓取和落库保留脏链接
+    strip_tracking: bool = True
 
 
 @dataclass
@@ -57,7 +61,7 @@ class AppConfig:
     github: GitHubConfig
     http: HttpConfig
     fast_llm: LLMConfig | None = None
-    firecrawl: FirecrawlConfig | None = None
+    defuddle: DefuddleConfig = field(default_factory=DefuddleConfig)
 
 
 def _require(mapping: dict[str, Any], key: str) -> Any:
@@ -103,7 +107,7 @@ def load_config(path: str | Path) -> AppConfig:
     llm_raw = raw.get("llm", {})
     llm_fast_raw = raw.get("llm_fast")
     github_raw = raw.get("github", {})
-    firecrawl_raw = raw.get("firecrawl")
+    defuddle_raw = raw.get("defuddle", {}) or {}
     http_raw = raw.get("http", {}) or {}
 
     telegram = TelegramConfig(
@@ -129,15 +133,14 @@ def load_config(path: str | Path) -> AppConfig:
         pat=_require(github_raw, "pat"),
     )
 
-    firecrawl = None
-    if firecrawl_raw:
-        firecrawl = FirecrawlConfig(
-            api_key=_require(firecrawl_raw, "api_key"),
-            base_url=firecrawl_raw.get("base_url"),
-        )
-
     http = HttpConfig(
         verify_ssl=http_raw.get("verify_ssl", True),
+    )
+
+    defuddle = DefuddleConfig(
+        enabled=bool(defuddle_raw.get("enabled", True)),
+        base_url=defuddle_raw.get("base_url"),
+        strip_tracking=bool(defuddle_raw.get("strip_tracking", True)),
     )
 
     return AppConfig(
@@ -146,5 +149,5 @@ def load_config(path: str | Path) -> AppConfig:
         github=github,
         http=http,
         fast_llm=fast_llm,
-        firecrawl=firecrawl,
+        defuddle=defuddle,
     )

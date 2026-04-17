@@ -17,7 +17,8 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from .firecrawl import fetch_firecrawl
+from ..url_utils import strip_tracking_params
+from .defuddle import fetch_defuddle
 from .github import fetch_github
 from .headless import fetch_headless
 from .screenshot import capture_screenshot
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # 内容长度阈值
-# MIN_CONTENT_FOR_RETRY: 低于此阈值会尝试使用 Firecrawl 重新抓取
+# MIN_CONTENT_FOR_RETRY: 低于此阈值会尝试使用 Defuddle 重新抓取
 # MIN_CONTENT_FOR_SUMMARY: 低于此阈值会跳过 LLM 总结
 MIN_CONTENT_FOR_RETRY = 500
 MIN_CONTENT_FOR_SUMMARY = 500
@@ -45,7 +46,6 @@ ROUTERS: list[tuple[Callable[[str], bool], Callable[[str, AppConfig], PageConten
     # Twitter 现在由 headless fetcher 的策略处理
     # 2. 兜底 Fetchers (如果在特定配置下需要优先使用某些通用 fetcher，可调整顺序)
     # 目前默认逻辑是：如果没有命中专用 fetcher，直接进入 fetch_page 的兜底逻辑。
-    # 如果未来有 requests_fetcher 的特定匹配需求，可以在这里添加。
 ]
 
 
@@ -62,47 +62,57 @@ def fetch_page(url: str, config: AppConfig) -> PageContent:
     Raises:
         FetchError: 当抓取失败时。
     """
+    normalized_url = strip_tracking_params(url)
+    if normalized_url != url:
+        logger.info("已移除 URL 中的追踪参数: %s -> %s", url, normalized_url)
+
     # 1. 尝试匹配专用路由
     for matcher, handler in ROUTERS:
-        if matcher(url):
+        if matcher(normalized_url):
             try:
-                logger.debug("URL '%s' 匹配到专用 Fetcher: %s", url, handler.__name__)
-                return handler(url, config)
+                logger.debug("URL '%s' 匹配到专用 Fetcher: %s", normalized_url, handler.__name__)
+                return _normalize_page_urls(handler(normalized_url, config))
             except Exception as exc:
                 logger.warning("专用 Fetcher %s 失败: %s，尝试兜底...", handler.__name__, exc)
                 # 专用 Fetcher 失败后，继续执行，尝试兜底逻辑
                 break
 
     # 2. 使用默认 HeadlessFetcher 兜底抓取
-    logger.info("使用默认 HeadlessFetcher 兜底抓取: %s", url)
-    result = fetch_headless(url, config)
+    logger.info("使用默认 HeadlessFetcher 兜底抓取: %s", normalized_url)
+    result = _normalize_page_urls(fetch_headless(normalized_url, config))
 
-    # 3. 检查内容长度，如果过短则尝试 Firecrawl 补充抓取
-    if len(result.markdown.strip()) < MIN_CONTENT_FOR_RETRY and config.firecrawl:
+    # 3. 检查内容长度，如果过短且未显式关闭，则尝试 Defuddle 补充抓取
+    if len(result.markdown.strip()) < MIN_CONTENT_FOR_RETRY and config.defuddle.enabled:
         logger.warning(
-            "Headless 抓取内容过短 (%d 字符 < %d)，尝试使用 Firecrawl 重新抓取",
+            "Headless 抓取内容过短 (%d 字符 < %d)，尝试使用 Defuddle 重新抓取",
             len(result.markdown.strip()),
             MIN_CONTENT_FOR_RETRY,
         )
         try:
-            firecrawl_result = fetch_firecrawl(url, config)
-            # 只有当 Firecrawl 结果达到最小长度阈值时才使用
-            if len(firecrawl_result.markdown.strip()) >= MIN_CONTENT_FOR_RETRY:
+            defuddle_result = _normalize_page_urls(fetch_defuddle(normalized_url, config))
+            # 只有当 Defuddle 结果达到最小长度阈值时才使用
+            if len(defuddle_result.markdown.strip()) >= MIN_CONTENT_FOR_RETRY:
                 logger.info(
-                    "Firecrawl 抓取成功, 内容达到阈值 (%d 字符 >= %d)",
-                    len(firecrawl_result.markdown.strip()),
+                    "Defuddle 抓取成功, 内容达到阈值 (%d 字符 >= %d)",
+                    len(defuddle_result.markdown.strip()),
                     MIN_CONTENT_FOR_RETRY,
                 )
-                return firecrawl_result
+                return defuddle_result
             logger.info(
-                "Firecrawl 抓取内容仍过短 (%d 字符 < %d)，使用原结果",
-                len(firecrawl_result.markdown.strip()),
+                "Defuddle 抓取内容仍过短 (%d 字符 < %d)，使用原结果",
+                len(defuddle_result.markdown.strip()),
                 MIN_CONTENT_FOR_RETRY,
             )
         except Exception as exc:
-            logger.warning("Firecrawl 补充抓取失败: %s，使用 Headless 结果", exc)
+            logger.warning("Defuddle 补充抓取失败: %s，使用 Headless 结果", exc)
 
     return result
+
+
+def _normalize_page_urls(page: PageContent) -> PageContent:
+    page.url = strip_tracking_params(page.url)
+    page.final_url = strip_tracking_params(page.final_url)
+    return page
 
 
 __all__ = [

@@ -25,6 +25,7 @@ from .config import AppConfig, load_config
 from .fetchers import capture_screenshot
 from .pipeline import HtmlToObsidianPipeline
 from .task_queue import ChatTaskQueueFullError, Job, TaskQueueFullError, TaskScheduler
+from .url_utils import strip_tracking_params
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ HELP_TEXT = """📚 *WebSum Bot 命令列表*
 
 def extract_first_url(text: str) -> str | None:
     match = URL_REGEX.search(text)
-    return match.group(0) if match else None
+    return strip_tracking_params(match.group(0)) if match else None
 
 
 class TelegramBotApp:

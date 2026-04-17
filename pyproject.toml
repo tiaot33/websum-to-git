@@ -19,7 +19,6 @@ dependencies = [
     "markdownify",
     "tiktoken",
     "PyGithub",
-    "firecrawl-py>=4.10.3",
     "cloverlabs-camoufox[geoip]>=0.5.5",
 ]
 
