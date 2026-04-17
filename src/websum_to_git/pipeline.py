@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import anthropic
+import openai
 import yaml
 
 from .config import AppConfig
@@ -20,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 # 提示词文件路径
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
+_RATE_LIMIT_RETRY_WAIT_SECONDS = 120
+_RATE_LIMIT_MAX_ATTEMPTS = 2
 
 
 def _load_prompt(name: str) -> str:
@@ -75,6 +80,22 @@ def _parse_summary_result(raw_output: str) -> SummaryResult:
     ai_title = lines[0].strip()
     content = lines[1].strip() if len(lines) > 1 else ""
     return SummaryResult(ai_title=ai_title, content=content)
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """判断异常是否为 LLM 的 429 限流错误。"""
+    if isinstance(exc, (openai.RateLimitError, anthropic.RateLimitError)):
+        return True
+
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 429:
+        return True
+
+    response = getattr(exc, "response", None)
+    if getattr(response, "status_code", None) == 429:
+        return True
+
+    return False
 
 
 class HtmlToObsidianPipeline:
@@ -139,6 +160,25 @@ class HtmlToObsidianPipeline:
             summarized=not summary_result.skipped,
         )
 
+    def _generate_with_retry(self, client: LLMClient, *, system_prompt: str | None, user_content: str) -> str:
+        """调用 LLM；若遇到 429，则等待 2 分钟后重试一次。"""
+        for attempt in range(1, _RATE_LIMIT_MAX_ATTEMPTS + 1):
+            try:
+                return client.generate(system_prompt=system_prompt, user_content=user_content)
+            except Exception as exc:  # noqa: BLE001
+                if not _is_rate_limit_error(exc) or attempt >= _RATE_LIMIT_MAX_ATTEMPTS:
+                    raise
+
+                logger.warning(
+                    "LLM API 返回 429，%d 秒后重试第 %d/%d 次",
+                    _RATE_LIMIT_RETRY_WAIT_SECONDS,
+                    attempt + 1,
+                    _RATE_LIMIT_MAX_ATTEMPTS,
+                )
+                time.sleep(_RATE_LIMIT_RETRY_WAIT_SECONDS)
+
+        raise RuntimeError("LLM 重试失败")
+
     def _summarize_page(self, page: PageContent) -> SummaryResult:
         """将网页正文内容转换为适合 Obsidian 的 Markdown 摘要。"""
         text = page.markdown.strip()
@@ -165,7 +205,8 @@ class HtmlToObsidianPipeline:
             user_content = (
                 f"网页标题: {page.title}\n网页地址: {page.final_url}\n\n网页正文内容（已去除脚本等噪音标签）:\n{text}\n"
             )
-            raw_output = self._llm.generate(
+            raw_output = self._generate_with_retry(
+                self._llm,
                 system_prompt=_load_prompt("final_summary"),
                 user_content=user_content,
             ).strip()
@@ -185,7 +226,8 @@ class HtmlToObsidianPipeline:
                 f"当前片段: {idx}/{total}\n\n"
                 f"片段正文内容:\n{chunk}\n"
             )
-            raw_output = self._llm.generate(
+            raw_output = self._generate_with_retry(
+                self._llm,
                 system_prompt=_load_prompt("final_summary"),
                 user_content=chunk_user_content,
             ).strip()
@@ -216,7 +258,8 @@ class HtmlToObsidianPipeline:
         """调用 AI 生成文章标签。"""
         logger.info("生成标签, 标题: %s", title)
         user_content = f"文章标题: {title}\n\n文章摘要:\n{summary_content[:2000]}\n"
-        raw_output = self._fast_llm.generate(
+        raw_output = self._generate_with_retry(
+            self._fast_llm,
             system_prompt=_load_prompt("generate_tags"),
             user_content=user_content,
         ).strip()
@@ -251,7 +294,8 @@ class HtmlToObsidianPipeline:
         # 对于超长文本，分块翻译
         if token_count <= max_tokens:
             logger.info("文本较短, 执行单次翻译")
-            return self._fast_llm.generate(
+            return self._generate_with_retry(
+                self._fast_llm,
                 system_prompt=_load_prompt("translate_to_chinese"),
                 user_content=text,
             ).strip()
@@ -263,7 +307,8 @@ class HtmlToObsidianPipeline:
         translated_parts: list[str] = []
         for idx, chunk in enumerate(chunks, start=1):
             logger.info("翻译片段 %d/%d, 长度: %d", idx, len(chunks), len(chunk))
-            translated = self._fast_llm.generate(
+            translated = self._generate_with_retry(
+                self._fast_llm,
                 system_prompt=_load_prompt("translate_to_chinese"),
                 user_content=chunk,
             ).strip()
