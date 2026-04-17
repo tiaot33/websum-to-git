@@ -61,9 +61,8 @@ RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 # 从构建阶段复制虚拟环境（包含所有依赖）
 COPY --from=builder /app/.venv /app/.venv
 # 预下载 Camoufox 浏览器内核
-RUN /app/.venv/bin/python -m camoufox sync
-RUN /app/.venv/bin/python -m camoufox set official/prerelease/146.0.1-alpha.50
-RUN /app/.venv/bin/python -m camoufox fetch
+RUN /app/.venv/bin/python -m camoufox set official/prerelease/146.0.1-alpha.50 && \
+    /app/.venv/bin/python -m camoufox fetch
 
 # 复制应用源码
 COPY src /app/src
