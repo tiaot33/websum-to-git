@@ -60,9 +60,11 @@ RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 # 从构建阶段复制虚拟环境（包含所有依赖）
 COPY --from=builder /app/.venv /app/.venv
-# 预下载 Camoufox 浏览器内核
-RUN /app/.venv/bin/python -m camoufox set official/prerelease/146.0.1-alpha.50 && \
-    /app/.venv/bin/python -m camoufox fetch
+# 预下载固定版本的 Camoufox 浏览器内核。
+# 不能先执行 `camoufox set ...` 再 `camoufox fetch`：
+# 第一次 fetch 会清理兼容目录，导致 set 刚写入的 config.json 被删除，随后回退到默认 stable。
+RUN /app/.venv/bin/python -m camoufox fetch official/prerelease/146.0.1-alpha.50 && \
+    /app/.venv/bin/python -m camoufox set official/prerelease/146.0.1-alpha.50
 
 # 复制应用源码
 COPY src /app/src
